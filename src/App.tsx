@@ -18,7 +18,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import LoadingSpinner from "./components/ui/LoadingSpinner";
 
 // Pages
-import { LandingPage } from "./pages/landing/LandingPage";
+import { LandingPage } from "./LandingPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { CompanySetupPage } from "./pages/onboarding/CompanySetupPage";
@@ -47,7 +47,7 @@ import { OverheadsPage } from "./pages/overheads/OverheadsPage";
 import { ProfitDistributionPage } from "./pages/profitdistribution/ProfitDistributionPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { UserManagementPage } from "./pages/users/UserManagementPage";
-import { SuperAdminPage } from "./pages/superadmin/SuperAdminPage";
+import { SuperAdminPage } from "./SuperAdminPage";
 
 // ─── Smart Root Redirect ───────────────────────────────────────────────────────
 // Decides where to send the user based on their auth + company state
