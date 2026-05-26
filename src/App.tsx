@@ -1,14 +1,8 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import * as React from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, getRedirectResult } from "firebase/auth";
 import { auth } from "./firebase/config";
-import { getRedirectResult, GoogleAuthProvider } from "firebase/auth";
 
 import "./i18n";
 
@@ -17,7 +11,6 @@ import { useCompanyStore } from "./stores/companyStore";
 import { AppLayout } from "./components/layout/AppLayout";
 import LoadingSpinner from "./components/ui/LoadingSpinner";
 
-// Pages
 import { LandingPage } from "./LandingPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
@@ -49,60 +42,48 @@ import { SettingsPage } from "./pages/settings/SettingsPage";
 import { UserManagementPage } from "./pages/users/UserManagementPage";
 import { SuperAdminPage } from "./SuperAdminPage";
 
-// ─── Smart Root Redirect ───────────────────────────────────────────────────────
-// Decides where to send the user based on their auth + company state
-const RootRedirect: React.FC<{ user: any; hasCompany: boolean }> = ({ user, hasCompany }) => {
-  if (!user) return <LandingPage />;
-  if (!hasCompany) return <Navigate to="/onboarding" replace />;
-  return <Navigate to="/dashboard" replace />;
-};
-
-// ─── Protected Route ───────────────────────────────────────────────────────────
-const ProtectedRoute: React.FC<{ user: any; hasCompany: boolean; children: React.ReactNode }> = ({ user, hasCompany, children }) => {
-  if (!user) return <Navigate to="/welcome" replace />;
-  if (!hasCompany) return <Navigate to="/onboarding" replace />;
-  return <>{children}</>;
-};
-
-// ─── App Shell ─────────────────────────────────────────────────────────────────
 export default function App() {
   const { setUser } = useAuthStore();
   const { loadUserCompanies, companies } = useCompanyStore();
 
-  const [authUser, setAuthUser] = React.useState<any>(null);
-  const [loading, setLoading] = React.useState(true);
+  // Three states: "loading" | "authenticated" | "unauthenticated"
+  const [status, setStatus] = React.useState<"loading" | "authenticated" | "unauthenticated">("loading");
 
   React.useEffect(() => {
-    // Step 1: Handle Google redirect result FIRST
-    getRedirectResult(auth)
-      .then(async (result) => {
+    const init = async () => {
+      // Step 1: Check for Google redirect result
+      try {
+        const result = await getRedirectResult(auth);
         if (result?.user) {
-          // Google redirect just completed — save user and load companies
-          setAuthUser(result.user);
           setUser(result.user);
           await loadUserCompanies(result.user.uid);
+          setStatus("authenticated");
+          return;
         }
-      })
-      .catch((err) => {
-        console.error("Redirect result error:", err);
-      })
-      .finally(() => {
-        // Step 2: Now start the persistent auth listener
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-          setAuthUser(user);
-          setUser(user);
-          if (user) {
-            await loadUserCompanies(user.uid);
-          }
-          setLoading(false);
-        });
+      } catch (err) {
+        console.error("Redirect error:", err);
+      }
 
-        // Cleanup
-        return unsubscribe;
+      // Step 2: Listen for auth state
+      const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          setUser(user);
+          await loadUserCompanies(user.uid);
+          setStatus("authenticated");
+        } else {
+          setUser(null);
+          setStatus("unauthenticated");
+        }
       });
+
+      return unsubscribe;
+    };
+
+    init();
   }, []);
 
-  if (loading) {
+  // Show loading spinner until auth + companies are fully resolved
+  if (status === "loading") {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-slate-50">
         <LoadingSpinner message="Loading Safqa..." />
@@ -110,26 +91,37 @@ export default function App() {
     );
   }
 
+  const isLoggedIn = status === "authenticated";
   const hasCompany = companies.length > 0;
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* ── Public ── */}
+        {/* Public pages */}
         <Route path="/welcome" element={<LandingPage />} />
-        <Route path="/login" element={authUser && hasCompany ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-        <Route path="/register" element={authUser && hasCompany ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
-        <Route path="/onboarding" element={!authUser ? <Navigate to="/welcome" replace /> : <CompanySetupPage />} />
         <Route path="/superadmin" element={<SuperAdminPage />} />
+        <Route path="/login" element={
+          isLoggedIn && hasCompany ? <Navigate to="/dashboard" replace /> : <LoginPage />
+        } />
+        <Route path="/register" element={
+          isLoggedIn && hasCompany ? <Navigate to="/dashboard" replace /> : <RegisterPage />
+        } />
+        <Route path="/onboarding" element={
+          !isLoggedIn ? <Navigate to="/welcome" replace /> : <CompanySetupPage />
+        } />
 
-        {/* ── Root smart redirect ── */}
-        <Route path="/" element={<RootRedirect user={authUser} hasCompany={hasCompany} />} />
+        {/* Root — smart redirect */}
+        <Route path="/" element={
+          !isLoggedIn ? <LandingPage /> :
+          !hasCompany ? <Navigate to="/onboarding" replace /> :
+          <Navigate to="/dashboard" replace />
+        } />
 
-        {/* ── Protected app ── */}
+        {/* Protected routes */}
         <Route element={
-          <ProtectedRoute user={authUser} hasCompany={hasCompany}>
-            <AppLayout />
-          </ProtectedRoute>
+          !isLoggedIn ? <Navigate to="/welcome" replace /> :
+          !hasCompany ? <Navigate to="/onboarding" replace /> :
+          <AppLayout />
         }>
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="income" element={<IncomePage />} />
@@ -158,17 +150,13 @@ export default function App() {
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 
-        {/* ── Catch all ── */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 4000,
-          style: { borderRadius: "10px", background: "#0F172A", color: "#F1F5F9", fontSize: "14px" },
-        }}
-      />
+      <Toaster position="top-center" toastOptions={{
+        duration: 4000,
+        style: { borderRadius: "10px", background: "#0F172A", color: "#F1F5F9", fontSize: "14px" },
+      }} />
     </BrowserRouter>
   );
 }
