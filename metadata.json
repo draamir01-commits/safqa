@@ -1,0 +1,6 @@
+{
+  "name": "Safqa",
+  "description": "Smart ZATCA Phase 1 & 2 compliant accounting SaaS for Saudi Arabian businesses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Custom colors matching Safqa's design system */
+  --color-brand-primary: #1D4ED8;
+  --color-brand-dark: #1E3A8A;
+  --color-brand-emerald: #059669;
+  --color-brand-warning: #D97706;
+  --color-brand-danger: #DC2626;
+  --color-brand-slate: #0F172A;
+  --color-brand-border: #E2E8F0;
+  --color-brand-bg: #F1F5F9;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-brand-bg);
+    color: var(--color-brand-slate);
+    font-family: var(--font-sans);
+  }
+
+  /* Support for RTL and LTR default directions */
+  html[dir="rtl"] {
+    font-family: "Cairo", "Inter", sans-serif;
+  }
+  
+  html[dir="ltr"] {
+    font-family: "Inter", "Cairo", sans-serif;
+  }
+}
+
+/* Custom scrollbars and styling elements */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* PDF Template Print / Preview Styles */
+.ticket-print {
+  width: 80mm;
+  padding: 4mm;
+  font-family: "Cairo", sans-serif;
+}

@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "Company": {
+      "title": "Company",
+      "description": "Details of the KSA based business entity.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "English name" },
+        "nameAr": { "type": "string", "description": "Arabic name" },
+        "vatNumber": { "type": "string", "description": "15-digit KSA VAT number" },
+        "crNumber": { "type": "string", "description": "10-digit Commercial Registration Number" },
+        "address": { "type": "string", "description": "English building address" },
+        "addressAr": { "type": "string", "description": "Arabic building address" },
+        "city": { "type": "string", "description": "Saudi city" },
+        "country": { "type": "string", "enum": ["SA"], "description": "Country code" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "logo": { "type": "string", "description": "URL of logo in storage" },
+        "zatcaPhase": { "type": "integer", "enum": [1, 2] },
+        "zatcaCSID": { "type": "string" },
+        "zatcaPCSID": { "type": "string" },
+        "lastInvoiceHash": { "type": "string" },
+        "invoiceCounter": { "type": "integer" },
+        "currency": { "type": "string" },
+        "defaultVatRate": { "type": "number" },
+        "language": { "type": "string" },
+        "plan": { "type": "string" }
+      },
+      "required": ["name", "nameAr", "vatNumber", "crNumber", "address", "addressAr", "city", "country"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Team member of a company.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "accountant", "viewer"] }
+      },
+      "required": ["uid", "email", "name", "role"]
+    },
+    "CustomerOrSupplier": {
+      "title": "Customer or Supplier",
+      "description": "Business contact schema.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "nameAr": { "type": "string" },
+        "vatNumber": { "type": "string" },
+        "crNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "type": { "type": "string", "enum": ["individual", "business"] },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "nameAr", "type"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Inventory product or service items.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "nameAr": { "type": "string" },
+        "sku": { "type": "string" },
+        "barcode": { "type": "string" },
+        "type": { "type": "string", "enum": ["product", "service"] },
+        "salePrice": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "vatRate": { "type": "number" },
+        "vatCategory": { "type": "string", "enum": ["standard", "zero", "exempt"] },
+        "trackInventory": { "type": "boolean" },
+        "stockQty": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "nameAr", "type", "salePrice", "vatRate"]
+    },
+    "InvoiceOrBill": {
+      "title": "Invoice or Bill",
+      "description": "A ZATCA Phase 1 & 2 structured invoice/bill.",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string" },
+        "type": { "type": "string", "enum": ["standard", "simplified", "credit", "debit"] },
+        "status": { "type": "string" },
+        "issueDate": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "grandTotal": { "type": "number" },
+        "totalVat": { "type": "number" },
+        "zatcaUUID": { "type": "string" },
+        "zatcaHash": { "type": "string" },
+        "zatcaQRCode": { "type": "string" }
+      },
+      "required": ["invoiceNumber", "type", "status", "issueDate", "grandTotal"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User registration object.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "defaultCompanyId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Stores company setup configurations."
+    },
+    "/companies/{companyId}/members/{memberId}": {
+      "schema": "Member",
+      "description": "Stores company roles."
+    },
+    "/companies/{companyId}/customers/{customerId}": {
+      "schema": "CustomerOrSupplier",
+      "description": "Stores customers."
+    },
+    "/companies/{companyId}/suppliers/{supplierId}": {
+      "schema": "CustomerOrSupplier",
+      "description": "Stores suppliers."
+    },
+    "/companies/{companyId}/products/{productId}": {
+      "schema": "Product",
+      "description": "Stores product directory."
+    },
+    "/companies/{companyId}/invoices/{invoiceId}": {
+      "schema": "InvoiceOrBill",
+      "description": "Stores sales tax invoices."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Stores core registered app users."
+    }
+  }
+}
