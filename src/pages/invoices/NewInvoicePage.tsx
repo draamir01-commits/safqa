@@ -21,6 +21,7 @@ import { InvoiceType, InvoiceStatus, ZatcaStatus, LineItem, CustomerOrSupplier, 
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
+import { ClientSelector, ClientSelection } from "../../components/ui/ClientSelector";
 
 export const NewInvoicePage: React.FC = () => {
   const { t } = useTranslation();
@@ -325,16 +326,15 @@ export const NewInvoicePage: React.FC = () => {
             />
           </div>
 
-          <Select
-            label={language === "ar" ? "اختيار العميل المستلم" : "Customer / Contact Directory Selector"}
-            options={[
-              { value: "", label: language === "ar" ? "تحديد العميل" : "Select Customer" },
-              ...customers.map(c => ({ value: c.id, label: language === "ar" ? `${c.nameAr} (${c.vatNumber || "مبسط"})` : c.name }))
-            ]}
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-            required
-          />
+          <div className="relative">
+            <ClientSelector
+              label={language === "ar" ? "اختيار العميل المستلم" : "Customer / Contact Directory Selector"}
+              value={customerId ? { clientId: customerId } : undefined}
+              onChange={(sel: ClientSelection) => setCustomerId(sel.clientId)}
+              onClear={() => setCustomerId("")}
+              required
+            />
+          </div>
           <Select
             label={language === "ar" ? "ربط بمشروع (اختياري)" : "Link to Project (optional)"}
             options={[{ value: "", label: language === "ar" ? "بدون مشروع" : "No project" }, ...projects.map(p => ({ value: p.id, label: p.name }))]}

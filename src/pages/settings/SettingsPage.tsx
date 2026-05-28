@@ -2,7 +2,7 @@ import * as React from "react";
 import {
   Building2, UserCheck, FileText, List, Database,
   Save, Plus, Trash2, Upload, X, ShieldCheck,
-  Download, RefreshCw, AlertTriangle, Pencil, Check
+  Download, RefreshCw, AlertTriangle, Pencil, Check, PieChart, ImageIcon
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -107,6 +107,18 @@ export const SettingsPage: React.FC = () => {
   const [editingSig, setEditingSig] = React.useState<Signatory | null>(null);
   const [sigName, setSigName] = React.useState("");
   const [sigDesignation, setSigDesignation] = React.useState("");
+  const [sigSignatureUrl, setSigSignatureUrl] = React.useState("");
+
+  // Additional letterheads
+  const [additionalLetterheads, setAdditionalLetterheads] = React.useState<{ id: string; name: string; url: string }[]>([]);
+  const [newLHName, setNewLHName] = React.useState("");
+  const [newLHUrl, setNewLHUrl] = React.useState("");
+  const [footerAssetUrl, setFooterAssetUrl] = React.useState("");
+  const [lhSaving, setLhSaving] = React.useState(false);
+
+  // Equity share
+  const [equityPartners, setEquityPartners] = React.useState<{ id: string; name: string; percent: number; targetCapital: number }[]>([]);
+  const [equitySaving, setEquitySaving] = React.useState(false);
 
   // Custom lists
   const [lists, setLists] = React.useState<CustomList>(DEFAULT_LISTS);
@@ -130,6 +142,9 @@ export const SettingsPage: React.FC = () => {
     setZatcaPhase(String(currentCompany.zatcaPhase || 1) as "1" | "2");
     setDefaultVatRate(String(currentCompany.defaultVatRate || 15));
     setFiscalYearStart(currentCompany.fiscalYearStart || "01-01");
+    setAdditionalLetterheads((currentCompany as any).additionalLetterheads || []);
+    setFooterAssetUrl((currentCompany as any).footerAsset || "");
+    setEquityPartners((currentCompany as any).equityPartners || []);
   }, [currentCompany]);
 
   // Load signatories
@@ -177,7 +192,7 @@ export const SettingsPage: React.FC = () => {
     if (!sigName || !currentCompany) return;
     setSaving(true);
     try {
-      const sigData = { name: sigName, designation: sigDesignation, isActive: true };
+      const sigData = { name: sigName, designation: sigDesignation, isActive: true, signatureUrl: sigSignatureUrl };
       if (editingSig) {
         await updateDoc(doc(db, "companies", currentCompany.id, "signatories", editingSig.id), sigData);
         toast.success(language === "ar" ? "تم التحديث" : "Updated");
@@ -186,7 +201,7 @@ export const SettingsPage: React.FC = () => {
         await setDoc(doc(db, "companies", currentCompany.id, "signatories", id), sigData);
         toast.success(language === "ar" ? "تمت الإضافة" : "Added");
       }
-      setShowSigModal(false); setSigName(""); setSigDesignation(""); setEditingSig(null);
+      setShowSigModal(false); setSigName(""); setSigDesignation(""); setSigSignatureUrl(""); setEditingSig(null);
     } catch (err: any) { toast.error(err.message); }
     finally { setSaving(false); }
   };
@@ -196,6 +211,39 @@ export const SettingsPage: React.FC = () => {
     await deleteDoc(doc(db, "companies", currentCompany.id, "signatories", id));
     toast.success(language === "ar" ? "تم الحذف" : "Deleted");
   };
+
+  const handleSaveLetterheads = async () => {
+    if (!currentCompany) return;
+    setLhSaving(true);
+    try {
+      await updateCompany(currentCompany.id, {
+        additionalLetterheads,
+        footerAsset: footerAssetUrl,
+      } as any);
+      toast.success(language === "ar" ? "تم حفظ الترويسات" : "Letterheads saved");
+    } catch (err: any) { toast.error(err.message); }
+    finally { setLhSaving(false); }
+  };
+
+  const handleSaveEquity = async () => {
+    if (!currentCompany) return;
+    setEquitySaving(true);
+    try {
+      const total = equityPartners.reduce((s, p) => s + p.percent, 0);
+      if (total > 100) {
+        toast.error(language === "ar" ? "مجموع النسب يتجاوز 100%" : "Total percentages exceed 100%");
+        return;
+      }
+      await updateCompany(currentCompany.id, { equityPartners } as any);
+      toast.success(language === "ar" ? "تم حفظ توزيع الحصص" : "Equity distribution saved");
+    } catch (err: any) { toast.error(err.message); }
+    finally { setEquitySaving(false); }
+  };
+
+  const addEquityPartner = () => setEquityPartners(p => [...p, { id: Math.random().toString(36).slice(2), name: "", percent: 0, targetCapital: 0 }]);
+  const removeEquityPartner = (id: string) => setEquityPartners(p => p.filter(x => x.id !== id));
+  const updateEquityPartner = (id: string, field: string, val: any) =>
+    setEquityPartners(p => p.map(x => x.id === id ? { ...x, [field]: val } : x));
 
   const handleSaveLists = async () => {
     if (!currentCompany) return;
@@ -236,11 +284,13 @@ export const SettingsPage: React.FC = () => {
   // ── Tabs ─────────────────────────────────────────────────────────────────────
 
   const tabs = [
-    { id: "company", icon: Building2, labelEn: "Company Profile", labelAr: "بيانات الشركة" },
-    { id: "signatories", icon: UserCheck, labelEn: "Signatories", labelAr: "المفوضون بالتوقيع" },
-    { id: "lists", icon: List, labelEn: "Custom Lists", labelAr: "القوائم المخصصة" },
-    { id: "zatca", icon: ShieldCheck, labelEn: "ZATCA Settings", labelAr: "إعدادات زاتكا" },
-    { id: "backup", icon: Database, labelEn: "Data Backup", labelAr: "النسخ الاحتياطي" },
+    { id: "company",      icon: Building2,   labelEn: "Company Profile",   labelAr: "بيانات الشركة" },
+    { id: "signatories",  icon: UserCheck,   labelEn: "Signatories",       labelAr: "المفوضون بالتوقيع" },
+    { id: "letterheads",  icon: FileText,    labelEn: "Letterheads",       labelAr: "الترويسات" },
+    { id: "equity",       icon: PieChart,    labelEn: "Equity Share",      labelAr: "توزيع حصص الملكية" },
+    { id: "lists",        icon: List,        labelEn: "Custom Lists",      labelAr: "القوائم المخصصة" },
+    { id: "zatca",        icon: ShieldCheck, labelEn: "ZATCA Settings",    labelAr: "إعدادات زاتكا" },
+    { id: "backup",       icon: Database,    labelEn: "Data Backup",       labelAr: "النسخ الاحتياطي" },
   ];
 
   return (
@@ -314,7 +364,7 @@ export const SettingsPage: React.FC = () => {
                   <UserCheck className="h-5 w-5 text-brand-primary" />
                   {language === "ar" ? "المفوضون بالتوقيع" : "Authorized Signatories"}
                 </h3>
-                <Button onClick={() => { setEditingSig(null); setSigName(""); setSigDesignation(""); setShowSigModal(true); }} className="flex items-center gap-2 text-xs">
+                <Button onClick={() => { setEditingSig(null); setSigName(""); setSigDesignation(""); setSigSignatureUrl(""); setShowSigModal(true); }} className="flex items-center gap-2 text-xs">
                   <Plus className="h-4 w-4" />
                   {language === "ar" ? "إضافة مفوض" : "Add Signatory"}
                 </Button>
@@ -339,7 +389,7 @@ export const SettingsPage: React.FC = () => {
                         <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${s.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                           {s.isActive ? (language === "ar" ? "نشط" : "Active") : (language === "ar" ? "غير نشط" : "Inactive")}
                         </span>
-                        <button onClick={() => { setEditingSig(s); setSigName(s.name); setSigDesignation(s.designation); setShowSigModal(true); }}
+                        <button onClick={() => { setEditingSig(s); setSigName(s.name); setSigDesignation(s.designation); setSigSignatureUrl((s as any).signatureUrl || ""); setShowSigModal(true); }}
                           className="p-1.5 text-slate-400 hover:text-brand-primary hover:bg-slate-50 rounded-lg transition-colors">
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -352,6 +402,156 @@ export const SettingsPage: React.FC = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Letterheads ── */}
+          {activeTab === "letterheads" && (
+            <div className="space-y-5">
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-brand-primary" />
+                  {language === "ar" ? "الترويسات الإضافية" : "Additional Letterheads"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {language === "ar"
+                    ? "أضف ترويسات متعددة للشركة — تظهر كخيارات عند تصدير المستندات"
+                    : "Add multiple letterheads for your company — selectable when exporting documents"}
+                </p>
+                <div className="space-y-3">
+                  {additionalLetterheads.map(lh => (
+                    <div key={lh.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <ImageIcon className="h-8 w-8 text-slate-300 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-700 truncate">{lh.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{lh.url ? "✓ Image uploaded" : "No image"}</p>
+                      </div>
+                      <button onClick={() => setAdditionalLetterheads(p => p.filter(x => x.id !== lh.id))}
+                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3">
+                  <input
+                    value={newLHName}
+                    onChange={e => setNewLHName(e.target.value)}
+                    placeholder={language === "ar" ? "اسم الترويسة..." : "Letterhead name..."}
+                    className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (!newLHName.trim()) return;
+                      setAdditionalLetterheads(p => [...p, { id: Math.random().toString(36).slice(2), name: newLHName.trim(), url: newLHUrl }]);
+                      setNewLHName(""); setNewLHUrl("");
+                    }}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {language === "ar" ? "إضافة" : "Add"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5 text-brand-primary" />
+                  {language === "ar" ? "صورة تذييل الصفحة" : "Footer Asset"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {language === "ar" ? "صورة عرضية كاملة تظهر أسفل جميع المستندات المصدرة" : "Full-width image displayed at the bottom of all exported documents"}
+                </p>
+                <Input
+                  label={language === "ar" ? "رابط صورة التذييل" : "Footer Image URL"}
+                  value={footerAssetUrl}
+                  onChange={e => setFooterAssetUrl(e.target.value)}
+                  placeholder="https://..."
+                />
+                {footerAssetUrl && (
+                  <img src={footerAssetUrl} alt="footer preview" className="w-full h-16 object-cover rounded-xl border border-slate-200" />
+                )}
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveLetterheads} loading={lhSaving} className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  {language === "ar" ? "حفظ الترويسات" : "Save Letterheads"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Equity Share ── */}
+          {activeTab === "equity" && (
+            <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <PieChart className="h-5 w-5 text-brand-primary" />
+                {language === "ar" ? "توزيع حصص الملكية" : "Equity Share Distribution"}
+              </h3>
+              <p className="text-xs text-slate-500">
+                {language === "ar"
+                  ? "حدد نسب الملكية لكل شريك — تُستخدم في صفحة توزيع الأرباح"
+                  : "Define ownership percentages per partner — used in the Profit Distribution module"}
+              </p>
+              {equityPartners.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  <PieChart className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  {language === "ar" ? "لا يوجد شركاء بعد" : "No partners yet"}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {equityPartners.map(p => (
+                    <div key={p.id} className="grid grid-cols-3 gap-3 items-center">
+                      <input
+                        value={p.name}
+                        onChange={e => updateEquityPartner(p.id, "name", e.target.value)}
+                        placeholder={language === "ar" ? "اسم الشريك" : "Partner name"}
+                        className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number" min="0" max="100"
+                          value={p.percent}
+                          onChange={e => updateEquityPartner(p.id, "percent", Number(e.target.value))}
+                          className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                        />
+                        <span className="text-sm text-slate-500 shrink-0">%</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number" min="0"
+                          value={p.targetCapital}
+                          onChange={e => updateEquityPartner(p.id, "targetCapital", Number(e.target.value))}
+                          placeholder={language === "ar" ? "رأس المال المستهدف" : "Target capital"}
+                          className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                        />
+                        <button onClick={() => removeEquityPartner(p.id)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="text-sm text-slate-500 pt-1">
+                    {language === "ar" ? "المجموع:" : "Total:"}{" "}
+                    <span className={`font-bold ${equityPartners.reduce((s,p) => s+p.percent,0) > 100 ? "text-red-600" : "text-emerald-600"}`}>
+                      {equityPartners.reduce((s,p) => s+p.percent,0)}%
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <button onClick={addEquityPartner}
+                  className="flex items-center gap-2 text-sm font-semibold text-brand-primary hover:text-blue-700 transition-colors">
+                  <Plus className="h-4 w-4" />
+                  {language === "ar" ? "إضافة شريك" : "Add Partner"}
+                </button>
+                <div className="flex-1" />
+                <Button onClick={handleSaveEquity} loading={equitySaving} className="flex items-center gap-2">
+                  <Save className="h-4 w-4" />
+                  {language === "ar" ? "حفظ التوزيع" : "Save Distribution"}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -469,6 +669,10 @@ export const SettingsPage: React.FC = () => {
         <div className="flex flex-col gap-4">
           <Input label={language === "ar" ? "الاسم الكامل" : "Full Name"} value={sigName} onChange={e => setSigName(e.target.value)} placeholder={language === "ar" ? "مثال: أحمد محمد" : "e.g. John Smith"} />
           <Input label={language === "ar" ? "المسمى الوظيفي" : "Designation"} value={sigDesignation} onChange={e => setSigDesignation(e.target.value)} placeholder={language === "ar" ? "مثال: المدير المالي" : "e.g. Chief Financial Officer"} />
+          <Input label={language === "ar" ? "رابط صورة التوقيع الرقمي (اختياري)" : "Digital Signature Image URL (optional)"} value={sigSignatureUrl} onChange={e => setSigSignatureUrl(e.target.value)} placeholder="https://..." />
+          {sigSignatureUrl && (
+            <img src={sigSignatureUrl} alt="signature preview" className="h-16 object-contain border border-slate-200 rounded-lg p-2" />
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowSigModal(false)}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
             <Button onClick={handleSaveSig} loading={saving}>{language === "ar" ? "حفظ" : "Save"}</Button>

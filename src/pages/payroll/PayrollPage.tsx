@@ -24,44 +24,165 @@ interface Employee {
 }
 
 const PayslipModal: React.FC<{ employee: Employee; month: string; onClose: () => void; language: "ar" | "en" }> = ({ employee, month, onClose, language }) => {
+  const { currentCompany } = useCompanyStore();
   const gross = employee.basicSalary + employee.housingAllowance + employee.transportAllowance + (employee.foodAllowance || 0);
+
+  // Options for customising printout
+  const [showLogo,       setShowLogo]       = React.useState(true);
+  const [showLetterhead, setShowLetterhead] = React.useState(false);
+  const [showStamp,      setShowStamp]      = React.useState(true);
+  const [showDeductions, setShowDeductions] = React.useState(true);
+  const [showAdvances,   setShowAdvances]   = React.useState(true);
+
+  // Signatories from Firestore
+  const [signatories, setSignatories] = React.useState<{ id: string; name: string; designation: string }[]>([]);
+  const [selectedSig,  setSelectedSig]  = React.useState("");
+
+  React.useEffect(() => {
+    if (!currentCompany) return;
+    const { collection, onSnapshot, db } = require("firebase/firestore");
+    // dynamic import to avoid circular deps
+    import("../../firebase/config").then(({ db: fireDb }) => {
+      import("firebase/firestore").then(({ collection: col, onSnapshot: snap }) => {
+        const unsub = snap(col(fireDb, "companies", currentCompany.id, "signatories"),
+          (s: any) => setSignatories(s.docs.map((d: any) => ({ id: d.id, ...d.data() }))));
+        return unsub;
+      });
+    });
+  }, [currentCompany]);
+
+  const selectedSignatory = signatories.find(s => s.id === selectedSig);
+
+  const handlePrint = () => {
+    const prevTitle = document.title;
+    document.title = `Payslip-${employee.name}-${month}`;
+    window.print();
+    document.title = prevTitle;
+  };
+
   return (
     <Modal isOpen title={language === "ar" ? "كشف الراتب" : "Payslip"} onClose={onClose}>
-      <div className="space-y-4 font-sans text-sm">
-        <div className="flex justify-between items-start border-b pb-4">
-          <div>
-            <h3 className="font-bold text-slate-800 text-lg">{language === "ar" ? employee.nameAr : employee.name}</h3>
-            <p className="text-slate-500">{employee.role}</p>
+      <div className="space-y-5 font-sans text-sm">
+
+        {/* Print options */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <p className="text-xs font-bold text-slate-600 mb-3">{language === "ar" ? "خيارات الطباعة" : "Print Options"}</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: "showLogo",       val: showLogo,       set: setShowLogo,       labelEn: "Show Logo",       labelAr: "إظهار الشعار" },
+              { key: "showLetterhead", val: showLetterhead, set: setShowLetterhead, labelEn: "Show Letterhead",  labelAr: "إظهار ترويسة" },
+              { key: "showStamp",      val: showStamp,      set: setShowStamp,      labelEn: "Show Stamp",       labelAr: "إظهار الختم" },
+              { key: "showDeductions", val: showDeductions, set: setShowDeductions, labelEn: "Show Deductions",  labelAr: "إظهار الاستقطاعات" },
+              { key: "showAdvances",   val: showAdvances,   set: setShowAdvances,   labelEn: "Show Advances",    labelAr: "إظهار السلف" },
+            ].map(opt => (
+              <label key={opt.key} className="flex items-center gap-2 cursor-pointer text-xs text-slate-600">
+                <input type="checkbox" checked={opt.val} onChange={e => opt.set(e.target.checked)} className="rounded" />
+                {language === "ar" ? opt.labelAr : opt.labelEn}
+              </label>
+            ))}
           </div>
-          <div className="text-end">
-            <p className="text-xs text-slate-400">{language === "ar" ? "الشهر" : "Month"}</p>
-            <p className="font-semibold">{month}</p>
-          </div>
-        </div>
-        <div className="space-y-2">
-          {[
-            { label: language === "ar" ? "الراتب الأساسي" : "Basic Salary", value: employee.basicSalary },
-            { label: language === "ar" ? "بدل السكن" : "Housing Allowance", value: employee.housingAllowance },
-            { label: language === "ar" ? "بدل النقل" : "Transport Allowance", value: employee.transportAllowance },
-            ...(employee.foodAllowance ? [{ label: language === "ar" ? "بدل الطعام" : "Food Allowance", value: employee.foodAllowance }] : []),
-          ].map((r, i) => (
-            <div key={i} className="flex justify-between text-sm">
-              <span className="text-slate-600">{r.label}</span>
-              <span className="font-semibold">{formatCurrency(r.value, language)}</span>
+          {signatories.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-slate-600 mb-1">{language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory"}</p>
+              <select value={selectedSig} onChange={e => setSelectedSig(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none">
+                <option value="">{language === "ar" ? "بدون مفوض" : "None"}</option>
+                {signatories.map(s => <option key={s.id} value={s.id}>{s.name} — {s.designation}</option>)}
+              </select>
             </div>
-          ))}
+          )}
         </div>
-        <div className="border-t-2 border-slate-800 pt-3 flex justify-between font-bold text-base">
-          <span>{language === "ar" ? "صافي الراتب" : "Net Salary"}</span>
-          <span className="text-brand-primary">{formatCurrency(gross, language)}</span>
+
+        {/* Payslip document */}
+        <div id="payslip-print" className="border border-slate-200 rounded-xl p-5">
+          {/* Letterhead / header */}
+          {showLetterhead && currentCompany && (
+            <div className="flex items-start justify-between border-b pb-4 mb-4">
+              {showLogo && currentCompany.logo ? (
+                <img src={currentCompany.logo} alt="logo" className="h-12 object-contain" />
+              ) : (
+                <div className="h-12 w-12 rounded-xl bg-brand-primary flex items-center justify-center text-white font-bold text-xl">
+                  {(currentCompany.nameAr || currentCompany.name || "S")[0]}
+                </div>
+              )}
+              <div className="text-end text-xs text-slate-500 space-y-0.5">
+                <p className="font-bold text-slate-800 text-sm">{language === "ar" ? currentCompany.nameAr : currentCompany.name}</p>
+                {currentCompany.vatNumber && <p>VAT: {currentCompany.vatNumber}</p>}
+                {currentCompany.phone && <p>{currentCompany.phone}</p>}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between items-start border-b pb-4 mb-4">
+            <div>
+              <h3 className="font-bold text-slate-800 text-lg">{language === "ar" ? employee.nameAr : employee.name}</h3>
+              <p className="text-slate-500 text-sm">{employee.role}</p>
+              {employee.nationalId && <p className="text-xs text-slate-400">ID: {employee.nationalId}</p>}
+            </div>
+            <div className="text-end">
+              <p className="text-xs text-slate-400">{language === "ar" ? "الشهر" : "Month"}</p>
+              <p className="font-bold text-slate-800">{month}</p>
+            </div>
+          </div>
+
+          {/* Earnings */}
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{language === "ar" ? "المستحقات" : "Earnings"}</p>
+          <div className="space-y-2 mb-4">
+            {[
+              { label: language === "ar" ? "الراتب الأساسي" : "Basic Salary",       value: employee.basicSalary },
+              { label: language === "ar" ? "بدل السكن" : "Housing Allowance",       value: employee.housingAllowance },
+              { label: language === "ar" ? "بدل النقل" : "Transport Allowance",     value: employee.transportAllowance },
+              ...(employee.foodAllowance ? [{ label: language === "ar" ? "بدل الطعام" : "Food Allowance", value: employee.foodAllowance }] : []),
+            ].map((r, i) => (
+              <div key={i} className="flex justify-between text-sm">
+                <span className="text-slate-600">{r.label}</span>
+                <span className="font-semibold">{formatCurrency(r.value, language)}</span>
+              </div>
+            ))}
+          </div>
+
+          {showDeductions && (
+            <>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{language === "ar" ? "الاستقطاعات" : "Deductions"}</p>
+              <div className="flex justify-between text-sm mb-4">
+                <span className="text-slate-600">{language === "ar" ? "لا توجد استقطاعات" : "No deductions"}</span>
+                <span className="font-semibold text-slate-400">{formatCurrency(0, language)}</span>
+              </div>
+            </>
+          )}
+
+          <div className="border-t-2 border-slate-800 pt-3 flex justify-between font-bold text-base">
+            <span>{language === "ar" ? "صافي الراتب" : "Net Salary"}</span>
+            <span className="text-brand-primary">{formatCurrency(gross, language)}</span>
+          </div>
+
+          <div className="mt-4 bg-slate-50 rounded-lg p-3 text-xs text-slate-500">
+            <p>IBAN: {employee.iban}</p>
+          </div>
+
+          {/* Signatory */}
+          {selectedSignatory && (
+            <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end">
+              <div className="text-center text-xs text-slate-600">
+                <div className="w-24 border-b border-slate-400 mb-1 mx-auto" />
+                <p className="font-semibold">{selectedSignatory.name}</p>
+                <p className="text-slate-400">{selectedSignatory.designation}</p>
+              </div>
+            </div>
+          )}
+
+          {showStamp && currentCompany?.logo && (
+            <div className="mt-4 flex justify-end opacity-30">
+              <img src={currentCompany.logo} alt="stamp" className="h-16 w-16 object-contain" />
+            </div>
+          )}
         </div>
-        <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500">
-          <p>{language === "ar" ? "IBAN:" : "IBAN:"} {employee.iban}</p>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
+
+        <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>{language === "ar" ? "إغلاق" : "Close"}</Button>
-          <Button onClick={() => window.print()} className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />{language === "ar" ? "طباعة" : "Print"}
+          <Button onClick={handlePrint} className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            {language === "ar" ? "طباعة / PDF" : "Print / PDF"}
           </Button>
         </div>
       </div>

@@ -26,6 +26,7 @@ export const Sidebar: React.FC = () => {
         { path: "/invoices", label: language === "ar" ? "الفواتير" : "Invoices", icon: FileText },
         { path: "/delivery-notes", label: language === "ar" ? "مذكرات التسليم" : "Delivery Notes", icon: Truck },
         { path: "/customers", label: language === "ar" ? "العملاء" : "Customers", icon: Users },
+        { path: "/client-statement", label: language === "ar" ? "كشف حساب العميل" : "Client Statement", icon: FileSpreadsheet },
       ]},
     { title: language === "ar" ? "المشتريات" : "Purchases",
       items: [
