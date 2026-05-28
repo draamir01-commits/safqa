@@ -16,7 +16,7 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
 
   const { language, setLanguage } = useUIStore();
-  const { loadUserCompanies } = useCompanyStore();
+  const { loadUserCompanies, companies } = useCompanyStore();
   
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -38,9 +38,14 @@ export const LoginPage: React.FC = () => {
       const loggedUser = await loginWithEmail(email, password);
       toast.success(language === "ar" ? "أهلاً بك! تم الدخول بنجاح" : "Welcome back! Login successful");
       
-      // Load user companies access mapping
+      // Load companies then navigate directly — no flicker through /
       await loadUserCompanies(loggedUser.uid);
-      navigate("/");
+      const userCompanies = useCompanyStore.getState().companies;
+      if (userCompanies.length > 0) {
+        navigate("/dashboard", { replace: true });
+      } else {
+        navigate("/onboarding", { replace: true });
+      }
     } catch (err: any) {
       console.error("Login failed:", err);
       toast.error(language === "ar" ? "البريد الإلكتروني أو كلمة المرور غير صحيحة" : "Invalid email or password");
