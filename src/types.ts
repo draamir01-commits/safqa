@@ -53,8 +53,14 @@ export interface Member {
   uid: string;
   email: string;
   name: string;
-  role: "owner" | "admin" | "accountant" | "viewer";
+  role: "owner" | "admin" | "manager" | "accountant" | "viewer";
+  status: "active" | "pending" | "rejected";
+  permissions: Record<string, "read" | "write" | "both">;
   addedAt: Date | any;
+  approvedAt?: Date | any;
+  approvedBy?: string;
+  rejectedAt?: Date | any;
+  rejectedBy?: string;
 }
 
 export interface CustomerOrSupplier {
