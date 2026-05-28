@@ -234,3 +234,63 @@ export async function saveAccountNode(companyId: string, accountId: string, data
 export async function saveJournal(companyId: string, entryId: string, data: any) {
   return saveJournalEntry(companyId, entryId, data);
 }
+
+// MEMBER STATUS MANAGEMENT (Pending Approval Flow)
+export async function getMemberStatus(companyId: string, userId: string): Promise<"active" | "pending" | "rejected" | null> {
+  try {
+    const memberRef = doc(db, "companies", companyId, "members", userId);
+    const snap = await getDoc(memberRef);
+    if (!snap.exists()) return null;
+    return snap.data().status || "active";
+  } catch (error) {
+    return null;
+  }
+}
+
+export async function approveMember(companyId: string, memberId: string, approvedByUid: string) {
+  try {
+    await updateDoc(doc(db, "companies", companyId, "members", memberId), {
+      status: "active",
+      approvedAt: serverTimestamp(),
+      approvedBy: approvedByUid,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `companies/${companyId}/members/${memberId}`);
+  }
+}
+
+export async function rejectMember(companyId: string, memberId: string, rejectedByUid: string) {
+  try {
+    await updateDoc(doc(db, "companies", companyId, "members", memberId), {
+      status: "rejected",
+      rejectedAt: serverTimestamp(),
+      rejectedBy: rejectedByUid,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `companies/${companyId}/members/${memberId}`);
+  }
+}
+
+export async function reRequestAccess(companyId: string, memberId: string) {
+  try {
+    await updateDoc(doc(db, "companies", companyId, "members", memberId), {
+      status: "pending",
+      reRequestedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `companies/${companyId}/members/${memberId}`);
+  }
+}
+
+export function listenPendingMembers(companyId: string, callback: (members: any[]) => void) {
+  const q = query(
+    collection(db, "companies", companyId, "members"),
+    where("status", "==", "pending")
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(d => ({ uid: d.id, ...d.data() })));
+  });
+}
