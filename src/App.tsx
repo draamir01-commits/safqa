@@ -17,6 +17,7 @@ import { RegisterPage } from "./pages/auth/RegisterPage";
 import { CompanySetupPage } from "./pages/onboarding/CompanySetupPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { CustomersPage } from "./pages/customers/CustomersPage";
+import { ClientStatementPage } from "./pages/customers/ClientStatementPage";
 import { SuppliersPage } from "./pages/suppliers/SuppliersPage";
 import { ProductsPage } from "./pages/products/ProductsPage";
 import { InvoicesPage } from "./pages/invoices/InvoicesPage";
@@ -134,6 +135,7 @@ export default function App() {
           <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="delivery-notes" element={<DeliveryNotesPage />} />
           <Route path="customers" element={<CustomersPage />} />
+          <Route path="client-statement" element={<ClientStatementPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="bills" element={<BillsPage />} />
