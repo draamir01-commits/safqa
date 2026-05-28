@@ -63,6 +63,17 @@ export interface Member {
   rejectedBy?: string;
 }
 
+export interface ClientContact {
+  id: string;
+  name: string;
+  nameAr?: string;
+  designation: string;
+  email?: string;
+  phone?: string;
+  isPrimary: boolean;
+  notes?: string;
+}
+
 export interface CustomerOrSupplier {
   id: string;
   name: string;
@@ -73,12 +84,27 @@ export interface CustomerOrSupplier {
   phone?: string;
   address?: string;
   city?: string;
+  // Enhanced ZATCA-compliant address fields
+  street?: string;
+  buildingNumber?: string;
+  district?: string;
+  zipCode?: string;
+  country?: string;
+  // Multi-contact support
+  contacts?: ClientContact[];
+  // Financial fields
+  paymentTerms?: string;
+  creditLimit?: number;
+  // Classification
+  clientCategory?: string;
+  industry?: string;
   type: "individual" | "business";
   totalInvoiced?: number;
   totalPaid?: number;
   balance?: number;
   bankName?: string;
   iban?: string;
+  notes?: string;
   isActive: boolean;
   createdAt: Date | any;
   updatedAt: Date | any;
