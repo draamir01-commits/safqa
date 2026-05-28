@@ -126,6 +126,10 @@ export const SettingsPage: React.FC = () => {
 
   // Backup
   const [backingUp, setBackingUp] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
+  const [importProgress, setImportProgress] = React.useState<{ current: number; total: number; collection: string } | null>(null);
+  const [importResult, setImportResult] = React.useState<{ success: number; failed: number } | null>(null);
+  const importFileRef = React.useRef<HTMLInputElement>(null);
 
   // Load company data into form
   React.useEffect(() => {
@@ -253,6 +257,74 @@ export const SettingsPage: React.FC = () => {
       toast.success(language === "ar" ? "تم حفظ القوائم" : "Lists saved");
     } catch (err: any) { toast.error(err.message); }
     finally { setListsSaving(false); }
+  };
+
+  const handleImport = async (file: File) => {
+    if (!currentCompany) return;
+    setImporting(true);
+    setImportResult(null);
+    setImportProgress(null);
+
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      const COLLECTIONS = [
+        "invoices","bills","expenses","customers","suppliers","products",
+        "employees","quotations","purchaseOrders","deliveryNotes","pettyCash",
+        "overheads","projects","attendance","vatReturns","profitDistributions",
+        "journalEntries","chartOfAccounts","income","salaryAdvances"
+      ];
+
+      let successCount = 0;
+      let failCount = 0;
+      const total = COLLECTIONS.filter(col => backup[col]?.length > 0).length;
+      let current = 0;
+
+      for (const col of COLLECTIONS) {
+        if (!backup[col] || backup[col].length === 0) continue;
+        current++;
+        setImportProgress({ current, total, collection: col });
+
+        for (const record of backup[col]) {
+          try {
+            const { id, ...data } = record;
+            // Convert Firestore timestamp objects back to dates
+            const clean = JSON.parse(JSON.stringify(data), (key, val) => {
+              if (val && typeof val === 'object' && val._seconds) {
+                return new Date(val._seconds * 1000);
+              }
+              return val;
+            });
+            await setDoc(
+              doc(db, "companies", currentCompany.id, col, id || Math.random().toString(36).slice(2)),
+              clean,
+              { merge: true }
+            );
+            successCount++;
+          } catch {
+            failCount++;
+          }
+        }
+      }
+
+      setImportResult({ success: successCount, failed: failCount });
+      toast.success(
+        language === "ar"
+          ? `تم استيراد ${successCount} سجل بنجاح`
+          : `Successfully imported ${successCount} records`
+      );
+    } catch (err: any) {
+      toast.error(
+        language === "ar"
+          ? "ملف غير صالح — تأكد أنه ملف JSON من نسخة صفقة الاحتياطية"
+          : "Invalid file — make sure it is a Safqa backup JSON file"
+      );
+    } finally {
+      setImporting(false);
+      setImportProgress(null);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
   };
 
   const updateList = (key: keyof CustomList, items: string[]) => setLists(prev => ({ ...prev, [key]: items }));
@@ -621,9 +693,11 @@ export const SettingsPage: React.FC = () => {
           {/* ── Data Backup ── */}
           {activeTab === "backup" && (
             <div className="space-y-4">
+
+              {/* Export */}
               <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <Database className="h-5 w-5 text-brand-primary" />
+                  <Download className="h-5 w-5 text-brand-primary" />
                   {language === "ar" ? "تصدير النسخة الاحتياطية" : "Export Backup"}
                 </h3>
                 <p className="text-sm text-slate-500">
@@ -631,10 +705,10 @@ export const SettingsPage: React.FC = () => {
                     ? "تصدير جميع بيانات الشركة كملف JSON يمكن استخدامه لاستعادة البيانات أو نقلها."
                     : "Export all company data as a JSON file that can be used to restore or transfer data."}
                 </p>
-                <div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-600 space-y-1">
-                  {["invoices","bills","expenses","customers","suppliers","products","employees","quotations","purchase orders","delivery notes","petty cash","overheads","projects","attendance","VAT returns"].map((item, i) => (
+                <div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-600 grid grid-cols-2 gap-1">
+                  {["invoices","bills","expenses","customers","suppliers","products","employees","quotations","purchase orders","delivery notes","petty cash","overheads","projects","attendance","VAT returns","income"].map((item, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <Check className="h-3 w-3 text-emerald-500" />
+                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
                       <span className="capitalize">{item}</span>
                     </div>
                   ))}
@@ -645,19 +719,104 @@ export const SettingsPage: React.FC = () => {
                 </Button>
               </div>
 
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              {/* Import */}
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <Upload className="h-5 w-5 text-indigo-500" />
+                  {language === "ar" ? "استيراد نسخة احتياطية" : "Import Backup"}
+                </h3>
+                <p className="text-sm text-slate-500">
+                  {language === "ar"
+                    ? "استيراد بيانات من ملف JSON تم تصديره مسبقاً من صفقة. سيتم دمج البيانات مع الموجودة حالياً."
+                    : "Import data from a previously exported Safqa JSON backup file. Records will be merged with existing data."}
+                </p>
+
+                {/* Upload area */}
+                <div
+                  onClick={() => importFileRef.current?.click()}
+                  className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors"
+                >
+                  <Upload className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-slate-600">
+                    {language === "ar" ? "انقر لاختيار ملف JSON" : "Click to select a JSON file"}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {language === "ar" ? "ملفات .json فقط" : ".json files only"}
+                  </p>
+                  <input
+                    ref={importFileRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImport(file);
+                    }}
+                  />
+                </div>
+
+                {/* Progress */}
+                {importing && importProgress && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-blue-700">
+                        {language === "ar" ? "جاري الاستيراد..." : "Importing..."}
+                      </p>
+                      <p className="text-xs text-blue-500">
+                        {importProgress.current} / {importProgress.total}
+                      </p>
+                    </div>
+                    <div className="w-full bg-blue-100 rounded-full h-2">
+                      <div
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-blue-500 capitalize">
+                      {language === "ar" ? "يتم استيراد:" : "Importing:"} {importProgress.collection}
+                    </p>
+                  </div>
+                )}
+
+                {/* Import result */}
+                {importResult && (
+                  <div className={`border rounded-xl p-4 flex items-start gap-3 ${
+                    importResult.failed === 0
+                      ? "bg-emerald-50 border-emerald-200"
+                      : "bg-amber-50 border-amber-200"
+                  }`}>
+                    <Check className={`h-5 w-5 shrink-0 mt-0.5 ${importResult.failed === 0 ? "text-emerald-500" : "text-amber-500"}`} />
+                    <div>
+                      <p className={`text-sm font-semibold ${importResult.failed === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                        {language === "ar" ? "اكتمل الاستيراد" : "Import Complete"}
+                      </p>
+                      <p className="text-xs mt-1 text-slate-600">
+                        {language === "ar"
+                          ? `${importResult.success} سجل تم استيراده بنجاح${importResult.failed > 0 ? ` — ${importResult.failed} فشل` : ""}`
+                          : `${importResult.success} records imported successfully${importResult.failed > 0 ? ` — ${importResult.failed} failed` : ""}`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Warning */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-red-800 text-sm">{language === "ar" ? "تحذير" : "Warning"}</p>
-                    <p className="text-xs text-red-600 mt-1">
+                    <p className="font-semibold text-amber-800 text-sm">
+                      {language === "ar" ? "ملاحظة مهمة حول الاستيراد" : "Important note about importing"}
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
                       {language === "ar"
-                        ? "احتفظ بنسخة احتياطية دورية من بياناتك. لا يمكن استعادة البيانات المحذوفة."
-                        : "Keep regular backups of your data. Deleted data cannot be recovered."}
+                        ? "الاستيراد يدمج البيانات مع الموجودة — لن يتم حذف أي بيانات حالية. السجلات التي لها نفس المعرف ستُحدَّث."
+                        : "Import merges data with existing records — no current data will be deleted. Records with matching IDs will be updated."}
                     </p>
                   </div>
                 </div>
               </div>
+
             </div>
           )}
         </div>
