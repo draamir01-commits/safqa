@@ -98,16 +98,19 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* Public pages */}
-        <Route path="/welcome" element={<LandingPage />} />
         <Route path="/superadmin" element={<SuperAdminPage />} />
         <Route path="/login" element={
-          isLoggedIn && hasCompany ? <Navigate to="/dashboard" replace /> : <LoginPage />
+          isLoggedIn && hasCompany ? <Navigate to="/dashboard" replace /> :
+          isLoggedIn && !hasCompany ? <Navigate to="/onboarding" replace /> :
+          <LoginPage />
         } />
         <Route path="/register" element={
-          isLoggedIn && hasCompany ? <Navigate to="/dashboard" replace /> : <RegisterPage />
+          isLoggedIn && hasCompany ? <Navigate to="/dashboard" replace /> :
+          isLoggedIn && !hasCompany ? <Navigate to="/onboarding" replace /> :
+          <RegisterPage />
         } />
         <Route path="/onboarding" element={
-          !isLoggedIn ? <Navigate to="/welcome" replace /> : <CompanySetupPage />
+          !isLoggedIn ? <Navigate to="/" replace /> : <CompanySetupPage />
         } />
 
         {/* Root — smart redirect */}
@@ -119,7 +122,7 @@ export default function App() {
 
         {/* Protected routes */}
         <Route element={
-          !isLoggedIn ? <Navigate to="/welcome" replace /> :
+          !isLoggedIn ? <Navigate to="/" replace /> :
           !hasCompany ? <Navigate to="/onboarding" replace /> :
           <AppLayout />
         }>
