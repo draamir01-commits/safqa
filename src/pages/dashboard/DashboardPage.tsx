@@ -1,14 +1,14 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { 
-  TrendingUp, TrendingDown, DollarSign, AlertCircle, 
-  Plus, ArrowUpRight, BarChart3, AlertOctagon, Sparkles 
+import {
+  TrendingUp, TrendingDown, DollarSign, AlertCircle,
+  Plus, BarChart3, AlertOctagon, Sparkles, Users
 } from "lucide-react";
 
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
-import { listenCompanyCollection } from "../../firebase/firestore";
+import { listenCompanyCollection, listenPendingMembers } from "../../firebase/firestore";
 import { formatCurrency } from "../../utils/formatters";
 import CurrencyDisplay from "../../components/ui/CurrencyDisplay";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -19,13 +19,12 @@ export const DashboardPage: React.FC = () => {
   const { currentCompany } = useCompanyStore();
   const { language } = useUIStore();
 
-  // Internal states
   const [invoices, setInvoices] = React.useState<any[]>([]);
   const [expenses, setExpenses] = React.useState<any[]>([]);
   const [products, setProducts] = React.useState<any[]>([]);
+  const [pendingMembers, setPendingMembers] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  // Load datasets dynamically with snapshot tracking
   React.useEffect(() => {
     if (!currentCompany) return;
 
@@ -40,11 +39,15 @@ export const DashboardPage: React.FC = () => {
       setProducts(data);
       setLoading(false);
     });
+    const unsubPending = listenPendingMembers(currentCompany.id, (data) => {
+      setPendingMembers(data);
+    });
 
     return () => {
       unsubInvoices();
       unsubExpenses();
       unsubProducts();
+      unsubPending();
     };
   }, [currentCompany]);
 
@@ -113,7 +116,29 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 font-sans">
-      
+
+      {/* Pending members banner */}
+      {pendingMembers.length > 0 && (
+        <Link to="/users" className="flex items-center gap-3 bg-amber-50 border border-amber-300 rounded-xl px-5 py-4 hover:bg-amber-100 transition-colors">
+          <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+            <Users className="h-5 w-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-amber-800">
+              {language === "ar"
+                ? `${pendingMembers.length} طلب وصول جديد في انتظار موافقتك`
+                : `${pendingMembers.length} pending access request${pendingMembers.length > 1 ? "s" : ""} awaiting your approval`}
+            </p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              {language === "ar" ? "انقر للمراجعة والموافقة أو الرفض" : "Click to review and approve or reject"}
+            </p>
+          </div>
+          <span className="text-xs font-bold text-amber-700 bg-amber-200 px-3 py-1 rounded-full">
+            {language === "ar" ? "مراجعة" : "Review"}
+          </span>
+        </Link>
+      )}
+
       {/* Greetings block */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
