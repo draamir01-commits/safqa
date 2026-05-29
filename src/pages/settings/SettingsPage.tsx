@@ -135,6 +135,10 @@ export const SettingsPage: React.FC = () => {
   const sigFileRef = React.useRef<HTMLInputElement>(null);
   const [newLHFile, setNewLHFile] = React.useState<string>("");
   const [uploadingLH, setUploadingLH] = React.useState(false);
+  const stampFileRef = React.useRef<HTMLInputElement>(null);
+  const logoFileRef = React.useRef<HTMLInputElement>(null);
+  const [stampUrl, setStampUrl] = React.useState("");
+  const [logoUrl, setLogoUrl] = React.useState("");
 
   // Convert file to base64
   const fileToBase64 = (file: File): Promise<string> =>
@@ -163,6 +167,8 @@ export const SettingsPage: React.FC = () => {
     setAdditionalLetterheads((currentCompany as any).additionalLetterheads || []);
     setFooterAssetUrl((currentCompany as any).footerAsset || "");
     setEquityPartners((currentCompany as any).equityPartners || []);
+    setStampUrl((currentCompany as any).stamp || "");
+    setLogoUrl((currentCompany as any).logo || "");
   }, [currentCompany]);
 
   // Load signatories
@@ -197,7 +203,9 @@ export const SettingsPage: React.FC = () => {
         zatcaPhase: parseInt(zatcaPhase) as 1 | 2,
         defaultVatRate: parseFloat(defaultVatRate),
         fiscalYearStart,
-      });
+        logo: logoUrl,
+        stamp: stampUrl,
+      } as any);
       toast.success(language === "ar" ? "تم حفظ بيانات الشركة" : "Company profile saved");
     } catch (err: any) {
       toast.error(err.message);
@@ -433,6 +441,102 @@ export const SettingsPage: React.FC = () => {
                   options={[{ value: "0", label: "0%" }, { value: "5", label: "5%" }, { value: "15", label: "15%" }]} />
                 <Input label={language === "ar" ? "بداية السنة المالية" : "Fiscal Year Start"} value={fiscalYearStart} onChange={e => setFiscalYearStart(e.target.value)} placeholder="01-01" />
               </div>
+              {/* Logo + Stamp uploads */}
+              <div className="border-t border-slate-100 pt-5 space-y-4">
+                <p className="text-sm font-bold text-slate-700">
+                  {language === "ar" ? "الشعار والختم" : "Logo & Stamp"}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {/* Logo */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold text-slate-600">
+                      {language === "ar" ? "شعار الشركة" : "Company Logo"}
+                    </label>
+                    <div
+                      onClick={() => logoFileRef.current?.click()}
+                      className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors min-h-[100px]"
+                    >
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="logo" className="max-h-16 max-w-full object-contain" />
+                      ) : (
+                        <>
+                          <Upload className="h-6 w-6 text-slate-300" />
+                          <p className="text-xs text-slate-400 text-center">
+                            {language === "ar" ? "انقر لرفع الشعار" : "Click to upload logo"}
+                          </p>
+                          <p className="text-xs text-slate-300 text-center">PNG شفاف موصى به</p>
+                        </>
+                      )}
+                      <input
+                        ref={logoFileRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const b64 = await fileToBase64(file);
+                          setLogoUrl(b64);
+                          if (logoFileRef.current) logoFileRef.current.value = "";
+                        }}
+                      />
+                    </div>
+                    {logoUrl && (
+                      <button onClick={() => setLogoUrl("")} className="text-xs text-red-500 hover:underline flex items-center gap-1">
+                        <X className="h-3 w-3" />
+                        {language === "ar" ? "إزالة الشعار" : "Remove logo"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Stamp */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold text-slate-600">
+                      {language === "ar" ? "ختم الشركة" : "Company Stamp"}
+                    </label>
+                    <div
+                      onClick={() => stampFileRef.current?.click()}
+                      className="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors min-h-[100px]"
+                    >
+                      {stampUrl ? (
+                        <img src={stampUrl} alt="stamp" className="max-h-16 max-w-full object-contain" />
+                      ) : (
+                        <>
+                          <Upload className="h-6 w-6 text-slate-300" />
+                          <p className="text-xs text-slate-400 text-center">
+                            {language === "ar" ? "انقر لرفع الختم" : "Click to upload stamp"}
+                          </p>
+                          <p className="text-xs text-slate-300 text-center">
+                            {language === "ar" ? "PNG شفاف موصى به" : "Transparent PNG recommended"}
+                          </p>
+                        </>
+                      )}
+                      <input
+                        ref={stampFileRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const b64 = await fileToBase64(file);
+                          setStampUrl(b64);
+                          if (stampFileRef.current) stampFileRef.current.value = "";
+                        }}
+                      />
+                    </div>
+                    {stampUrl && (
+                      <button onClick={() => setStampUrl("")} className="text-xs text-red-500 hover:underline flex items-center gap-1">
+                        <X className="h-3 w-3" />
+                        {language === "ar" ? "إزالة الختم" : "Remove stamp"}
+                      </button>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+
               <div className="flex justify-end pt-2">
                 <Button onClick={handleSaveCompany} loading={saving} className="flex items-center gap-2">
                   <Save className="h-4 w-4" />
