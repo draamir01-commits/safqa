@@ -1,9 +1,10 @@
 import * as React from "react";
-import { ShieldAlert, RefreshCw, CheckCircle, FileText, Clock, CreditCard, Paperclip, Plus } from "lucide-react";
+import { ShieldAlert, RefreshCw, CheckCircle, FileText, Clock, CreditCard, Paperclip, Plus, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { listenCompanyCollection, addDocument, updateDocument } from "../../firebase/firestore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { useAuthStore } from "../../stores/authStore";
 import { formatCurrency } from "../../utils/formatters";
 import { Invoice, Expense, Bill } from "../../types";
@@ -63,6 +64,7 @@ export const VatReturnPage: React.FC = () => {
   const [bills, setBills] = React.useState<Bill[]>([]);
   const [returns, setReturns] = React.useState<VatReturn[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [showDetail, setShowDetail] = React.useState(false);
   const [showPayment, setShowPayment] = React.useState(false);
@@ -198,6 +200,13 @@ export const VatReturnPage: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <ExportMenu data={returns} filename="vat-returns" headers={{ period: "Period", netVatDue: "Net VAT Due", status: "Status", dueDate: "Due Date", vatPaidAmount: "Paid" }} />
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />{language === "ar" ? "إقرار جديد" : "New Return"}
           </Button>
@@ -418,6 +427,13 @@ export const VatReturnPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "إقرارات ضريبة القيمة" : "VAT Returns"}
+        itemCount={returns?.length}
+      />
     </div>
   );
 };

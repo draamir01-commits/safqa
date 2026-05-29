@@ -1,9 +1,10 @@
 import * as React from "react";
-import { Plus, Eye, Truck, CheckCircle, Trash2, Package } from "lucide-react";
+import { Plus, Eye, Truck, CheckCircle, Trash2, Package, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { DeliveryNote, CustomerOrSupplier, Invoice } from "../../types";
 import Button from "../../components/ui/Button";
@@ -28,6 +29,7 @@ export const DeliveryNotesPage: React.FC = () => {
   const [customers, setCustomers] = React.useState<CustomerOrSupplier[]>([]);
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
   const [selected, setSelected] = React.useState<DeliveryNote | null>(null);
@@ -124,6 +126,14 @@ export const DeliveryNotesPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExportButton data={notes} filename="delivery-notes" headers={{ dnNumber: "DN Number", customerName: "Customer", deliveryDate: "Date", status: "Status" }} />
+
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             {language === "ar" ? "مذكرة تسليم جديدة" : "New Delivery Note"}
@@ -258,6 +268,13 @@ export const DeliveryNotesPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سندات التسليم" : "Delivery Notes"}
+        itemCount={deliveryNotes?.length}
+      />
     </div>
   );
 };

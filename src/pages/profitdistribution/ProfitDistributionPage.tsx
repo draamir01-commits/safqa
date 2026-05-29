@@ -1,9 +1,10 @@
 import * as React from "react";
-import { Plus, Trash2, PieChart, CheckCircle } from "lucide-react";
+import { Plus, Trash2, PieChart, CheckCircle, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { listenCompanyCollection, addDocument, updateDocument } from "../../firebase/firestore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { useAuthStore } from "../../stores/authStore";
 import { formatCurrency } from "../../utils/formatters";
 import { ProfitDistribution, Invoice, Expense } from "../../types";
@@ -21,6 +22,7 @@ export const ProfitDistributionPage: React.FC = () => {
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [expenses, setExpenses] = React.useState<Expense[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [period, setPeriod] = React.useState("Q1");
   const [year, setYear] = React.useState(new Date().getFullYear().toString());
@@ -102,6 +104,14 @@ export const ProfitDistributionPage: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <ExportButton data={distributions} filename="profit-distributions" headers={{ period: "Period", netProfit: "Net Profit", status: "Status" }} />
+
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />{language === "ar" ? "توزيع جديد" : "New Distribution"}
           </Button>
@@ -206,6 +216,13 @@ export const ProfitDistributionPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "توزيع الأرباح" : "Profit Distribution"}
+        itemCount={distributions?.length}
+      />
     </div>
   );
 };

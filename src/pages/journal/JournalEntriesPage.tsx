@@ -1,10 +1,11 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, ShieldAlert, Sparkles, Scale } from "lucide-react";
+import { Plus, Trash2, ShieldAlert, Sparkles, Scale, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, saveJournal, deleteDocument } from "../../firebase/firestore";
 import { JournalEntry, ChartOfAccount } from "../../types";
 
@@ -23,6 +24,7 @@ export const JournalEntriesPage: React.FC = () => {
   const [journals, setJournals] = React.useState<JournalEntry[]>([]);
   const [accounts, setAccounts] = React.useState<ChartOfAccount[]>([]);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
   // Form Fields
@@ -190,6 +192,14 @@ export const JournalEntriesPage: React.FC = () => {
           <h2 className="text-xl font-bold text-slate-800">{t("nav.journalEntries")}</h2>
           <p className="text-xs text-slate-500">Record balanced double-entry journals directly and adjust year-end corporate balances.</p>
         </div>
+
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
         <Button onClick={() => setModalOpen(true)} className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
           {language === "ar" ? "إضافة قيد يومية" : "Add Journal Entry"}
@@ -315,6 +325,13 @@ export const JournalEntriesPage: React.FC = () => {
         </form>
       </Modal>
 
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "القيود اليومية" : "Journal Entries"}
+        itemCount={entries?.length}
+      />
     </div>
   );
 };

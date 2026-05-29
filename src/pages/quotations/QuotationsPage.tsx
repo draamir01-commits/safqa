@@ -1,10 +1,11 @@
 import * as React from "react";
-import { Plus, Eye, FileText, CheckCircle, XCircle, Clock, ArrowRight, Trash2, Send } from "lucide-react";
+import { Plus, Eye, FileText, CheckCircle, XCircle, Clock, ArrowRight, Trash2, Send, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, addDocument, updateDocument, deleteDocument, getNextInvoiceNumber, saveInvoice } from "../../firebase/firestore";
 import { formatCurrency } from "../../utils/formatters";
 import { calculateLineItem, calculateTotals } from "../../utils/vatCalculator";
@@ -34,6 +35,7 @@ export const QuotationsPage: React.FC = () => {
   const [customers, setCustomers] = React.useState<CustomerOrSupplier[]>([]);
   const [products, setProducts] = React.useState<Product[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
   const [selected, setSelected] = React.useState<Quotation | null>(null);
@@ -181,6 +183,14 @@ export const QuotationsPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExportButton data={quotations} filename="quotations" headers={{ quotationNumber: "Number", customerName: "Customer", grandTotal: "Total", status: "Status" }} />
+
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             {language === "ar" ? "عرض سعر جديد" : "New Quotation"}
@@ -354,6 +364,13 @@ export const QuotationsPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل عروض الأسعار" : "Quotations Register"}
+        itemCount={quotations?.length}
+      />
     </div>
   );
 };

@@ -1,9 +1,10 @@
 import * as React from "react";
-import { Plus, Eye, Briefcase, CheckCircle, PauseCircle, XCircle, Trash2 } from "lucide-react";
+import { Plus, Eye, Briefcase, CheckCircle, PauseCircle, XCircle, Trash2, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { formatCurrency } from "../../utils/formatters";
 import { Project, CustomerOrSupplier, Invoice, Expense } from "../../types";
@@ -30,6 +31,7 @@ export const ProjectsPage: React.FC = () => {
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [expenses, setExpenses] = React.useState<Expense[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [showDetail, setShowDetail] = React.useState(false);
   const [selected, setSelected] = React.useState<Project | null>(null);
@@ -115,6 +117,14 @@ export const ProjectsPage: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <ExportButton data={projects} filename="projects" headers={{ name: "Name", clientName: "Client", contractValue: "Value", status: "Status" }} />
+
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />{language === "ar" ? "مشروع جديد" : "New Project"}
           </Button>
@@ -232,6 +242,13 @@ export const ProjectsPage: React.FC = () => {
           );
         })()}
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل المشاريع" : "Projects Register"}
+        itemCount={projects?.length}
+      />
     </div>
   );
 };

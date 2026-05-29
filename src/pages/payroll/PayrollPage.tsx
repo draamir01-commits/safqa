@@ -1,10 +1,11 @@
 import * as React from "react";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { useTranslation } from "react-i18next";
-import { Plus, Users, Landmark, Banknote, Pencil, Trash2, FileText, UserPlus, CreditCard, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Users, Landmark, Banknote, Pencil, Trash2, FileText, UserPlus, CreditCard, CheckCircle, XCircle, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { useAuthStore } from "../../stores/authStore";
 import { listenCompanyCollection, saveEmployee, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { isValidSaudiIban } from "../../utils/validators";
@@ -29,6 +30,7 @@ const PayslipModal: React.FC<{ employee: Employee; month: string; onClose: () =>
 
   // Options for customising printout
   const [showLogo,       setShowLogo]       = React.useState(true);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [showLetterhead, setShowLetterhead] = React.useState(false);
   const [showStamp,      setShowStamp]      = React.useState(true);
   const [showDeductions, setShowDeductions] = React.useState(true);
@@ -356,6 +358,13 @@ export const PayrollPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExportMenu data={employees} filename="employees" headers={{ name: "Name", nameAr: "Arabic Name", role: "Role", basicSalary: "Basic Salary", iban: "IBAN" }} />
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           {employees.length > 0 && (
             <Button onClick={() => setRunModalOpen(true)} variant="secondary" className="flex items-center gap-2 bg-white">
               <Landmark className="h-4 w-4 text-emerald-500" />{language === "ar" ? "صرف الأجور WPS" : "Run Payroll"}
@@ -547,6 +556,13 @@ export const PayrollPage: React.FC = () => {
       {payslipEmployee && (
         <PayslipModal employee={payslipEmployee} month={runMonth} onClose={() => setPayslipEmployee(null)} language={language} />
       )}
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل الرواتب" : "Payroll Register"}
+        itemCount={employees?.length}
+      />
     </div>
   );
 };

@@ -1,11 +1,12 @@
 import * as React from "react";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, saveBill, deleteDocument } from "../../firebase/firestore";
 import { Bill, CustomerOrSupplier } from "../../types";
 
@@ -25,6 +26,7 @@ export const BillsPage: React.FC = () => {
   const [bills, setBills] = React.useState<Bill[]>([]);
   const [suppliers, setSuppliers] = React.useState<CustomerOrSupplier[]>([]);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
   // Form Fields
@@ -177,6 +179,13 @@ export const BillsPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExportMenu data={bills} filename="bills" headers={{ billNumber: "Bill #", supplierName: "Supplier", issueDate: "Date", grandTotal: "Total", status: "Status" }} />
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setModalOpen(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             {language === "ar" ? "تسجيل فاتورة شراء" : "Add Supplier Bill"}
@@ -267,6 +276,13 @@ export const BillsPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل الفواتير" : "Bills Register"}
+        itemCount={bills?.length}
+      />
     </div>
   );
 };

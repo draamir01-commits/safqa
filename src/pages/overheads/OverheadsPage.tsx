@@ -1,9 +1,10 @@
 import * as React from "react";
-import { Plus, Trash2, Building2, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Building2, RefreshCw, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { listenCompanyCollection, addDocument, deleteDocument } from "../../firebase/firestore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { useAuthStore } from "../../stores/authStore";
 import { formatCurrency } from "../../utils/formatters";
 import { Overhead } from "../../types";
@@ -21,6 +22,7 @@ export const OverheadsPage: React.FC = () => {
   const { language } = useUIStore();
   const [overheads, setOverheads] = React.useState<Overhead[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [date, setDate] = React.useState(new Date().toISOString().split("T")[0]);
   const [title, setTitle] = React.useState("");
@@ -101,6 +103,14 @@ export const OverheadsPage: React.FC = () => {
         </div>
         <div className="flex gap-2">
           <ExportButton data={overheads} filename="overheads" headers={{ date: "Date", title: "Title", category: "Category", totalAmount: "Total", isRecurring: "Recurring" }} />
+
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setShowForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />{language === "ar" ? "إضافة مصروف ثابت" : "Add Overhead"}
           </Button>
@@ -176,6 +186,13 @@ export const OverheadsPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل المصاريف الثابتة" : "Overheads Register"}
+        itemCount={overheads?.length}
+      />
     </div>
   );
 };

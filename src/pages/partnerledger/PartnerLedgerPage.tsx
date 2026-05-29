@@ -1,8 +1,9 @@
 import * as React from "react";
-import { Scale, Search } from "lucide-react";
+import { Scale, Search, Printer } from "lucide-react";
 import { listenCompanyCollection } from "../../firebase/firestore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { Invoice, Bill, CustomerOrSupplier } from "../../types";
 import { ExportButton } from "../../components/ui/ExportButton";
@@ -17,6 +18,7 @@ export const PartnerLedgerPage: React.FC = () => {
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [bills, setBills] = React.useState<Bill[]>([]);
   const [selectedId, setSelectedId] = React.useState("");
+  const [showPrint, setShowPrint] = React.useState(false);
   const [partnerType, setPartnerType] = React.useState<"customer" | "supplier">("customer");
   const [search, setSearch] = React.useState("");
 
@@ -168,6 +170,13 @@ export const PartnerLedgerPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "دفتر أستاذ الشركاء" : "Partner Ledger"}
+        itemCount={entries?.length}
+      />
     </div>
   );
 };

@@ -1,11 +1,12 @@
 import * as React from "react";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, saveSupplier, deleteDocument } from "../../firebase/firestore";
 import { isValidSaudiVat, isValidSaudiCrn } from "../../utils/validators";
 import { CustomerOrSupplier } from "../../types";
@@ -23,6 +24,7 @@ export const SuppliersPage: React.FC = () => {
 
   const [suppliers, setSuppliers] = React.useState<CustomerOrSupplier[]>([]);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
@@ -174,6 +176,13 @@ export const SuppliersPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExportMenu data={suppliers} filename="suppliers" headers={{ name: "Name", nameAr: "Arabic Name", vatNumber: "VAT", crNumber: "CR", phone: "Phone", email: "Email", city: "City" }} />
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <Button onClick={() => setModalOpen(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             {language === "ar" ? "إضافة مورد" : "Add Supplier"}
@@ -280,6 +289,13 @@ export const SuppliersPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل الموردين" : "Suppliers Register"}
+        itemCount={suppliers?.length}
+      />
     </div>
   );
 };

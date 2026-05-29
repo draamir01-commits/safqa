@@ -1,11 +1,12 @@
 import * as React from "react";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, Pencil, Upload, Sparkles } from "lucide-react";
+import { Plus, Trash2, Pencil, Upload, Sparkles, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, saveExpense, deleteDocument, updateDocument } from "../../firebase/firestore";
 import { Expense } from "../../types";
 
@@ -26,6 +27,7 @@ export const ExpensesPage: React.FC = () => {
 
   const [expenses, setExpenses] = React.useState<Expense[]>([]);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
@@ -171,6 +173,13 @@ export const ExpensesPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <ExportMenu data={expenses} filename="expenses" headers={{ description: "Description", category: "Category", amountBeforeVat: "Net", vatAmount: "VAT", totalAmount: "Total", date: "Date" }} />
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
           <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors">
             <Upload className="h-3.5 w-3.5" />
             {language === "ar" ? "رفع مجمع" : "Bulk Upload"}
@@ -242,6 +251,13 @@ export const ExpensesPage: React.FC = () => {
       <Modal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} title={language === "ar" ? "رفع مصاريف مجمعة (CSV)" : "Bulk Expense Upload (CSV)"} size="lg">
         <BulkExpenseUpload onClose={() => setBulkOpen(false)} onSuccess={() => setBulkOpen(false)} />
       </Modal>
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل المصروفات" : "Expenses Register"}
+        itemCount={expenses?.length}
+      />
     </div>
   );
 };

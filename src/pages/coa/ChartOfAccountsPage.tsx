@@ -1,10 +1,11 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, ShieldAlert, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, saveAccountNode } from "../../firebase/firestore";
 import { ChartOfAccount, AccountType } from "../../types";
 
@@ -22,6 +23,7 @@ export const ChartOfAccountsPage: React.FC = () => {
 
   const [accounts, setAccounts] = React.useState<ChartOfAccount[]>([]);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
 
   // Form Fields
@@ -126,6 +128,14 @@ export const ChartOfAccountsPage: React.FC = () => {
           <h2 className="text-xl font-bold text-slate-800">{t("nav.chartOfAccounts")}</h2>
           <p className="text-xs text-slate-500">Corporate Chart of Accounts (COA) mapped per Saudi Ministry of Commerce standards.</p>
         </div>
+
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
         <Button onClick={() => setModalOpen(true)} className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
           {language === "ar" ? "إضافة حساب جديد" : "Add Account Node"}
@@ -192,6 +202,13 @@ export const ChartOfAccountsPage: React.FC = () => {
         </form>
       </Modal>
 
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "دليل الحسابات" : "Chart of Accounts"}
+        itemCount={accounts?.length}
+      />
     </div>
   );
 };

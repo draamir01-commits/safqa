@@ -1,9 +1,10 @@
 import * as React from "react";
-import { Plus, CheckCircle, XCircle, Clock, Calendar, Users } from "lucide-react";
+import { Plus, CheckCircle, XCircle, Clock, Calendar, Users, Printer } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
+import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, addDocument, updateDocument } from "../../firebase/firestore";
 import { AttendanceRecord } from "../../types";
 import Button from "../../components/ui/Button";
@@ -27,6 +28,7 @@ export const AttendancePage: React.FC = () => {
   const [records, setRecords] = React.useState<AttendanceRecord[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [showPrint, setShowPrint] = React.useState(false);
   const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split("T")[0]);
   const [selectedMonth, setSelectedMonth] = React.useState(new Date().toISOString().slice(0, 7));
 
@@ -204,6 +206,13 @@ export const AttendancePage: React.FC = () => {
           </table>
         </div>
       )}
+
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل الحضور والغياب" : "Attendance Register"}
+        itemCount={employees?.length}
+      />
     </div>
   );
 };
