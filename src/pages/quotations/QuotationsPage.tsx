@@ -363,170 +363,293 @@ export const QuotationsPage: React.FC = () => {
     await updateDocument(`companies/${currentCompany.id}/quotations`, q.id, { status, updatedAt: new Date() });
   };
 
-  // ── PDF export with branding ─────────────────────────────────────────────
+  // ── PDF export — professional layout matching reference ─────────────────
   const exportQuotationPDF = async (q: Quotation, opts?: { letterhead: boolean; lhId: string; logo: boolean; stamp: boolean; sigId: string; includeSig: boolean; }) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
     const pw = doc.internal.pageSize.getWidth();
-    let y = 15;
+    const ph_total = doc.internal.pageSize.getHeight();
+    const ML = 14; const MR = 14; const TW = pw - ML - MR;
+    let y = 0;
     const o = opts || { letterhead: false, lhId: "primary", logo: false, stamp: false, sigId: "", includeSig: false };
 
-    // ── Letterhead / header ───────────────────────────────────────────────
-    if (o.letterhead) {
+    // Helper: add letterhead on every page
+    const addLetterhead = async (pageDoc: any) => {
+      if (!o.letterhead) return 0;
       const selLH = expLetterheads.find((l: any) => l.id === o.lhId);
       if (selLH && selLH.url) {
         try {
           const b64 = await loadImageAsBase64(selLH.url);
-          doc.addImage(b64, "PNG", 0, 0, pw, 35);
-          y = 40;
-        } catch { /* fallback below */ }
+          pageDoc.addImage(b64, "PNG", 0, 0, pw, 38);
+          pageDoc.setDrawColor(220); pageDoc.line(ML, 39, pw - MR, 39);
+          return 44;
+        } catch {}
       }
-      if (y === 15) {
-        // Primary text letterhead
-        doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 30, "F");
-        if (o.logo && (currentCompany as any)?.logo) {
-          try { const lb = await loadImageAsBase64((currentCompany as any).logo); doc.addImage(lb, "PNG", 8, 4, 20, 20); } catch {}
-        }
-        doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
-        doc.text(currentCompany?.name || "Company", o.logo ? 32 : 14, 13);
-        doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(180);
-        doc.text([currentCompany?.vatNumber ? `VAT: ${currentCompany.vatNumber}` : "", currentCompany?.phone || "", currentCompany?.city || ""].filter(Boolean).join("   "), o.logo ? 32 : 14, 22);
-        y = 40;
-      }
-    } else {
-      // Simple header
-      if (o.logo && (currentCompany as any)?.logo) {
+      // Primary letterhead — two-column text layout like reference
+      const lhH = 38;
+      pageDoc.setFillColor(255, 255, 255);
+      // Left col — company EN
+      const logoUrl = (currentCompany as any)?.logo;
+      if (o.logo && logoUrl) {
         try {
-          const lb = await loadImageAsBase64((currentCompany as any).logo);
-          doc.addImage(lb, "PNG", 14, y - 5, 18, 18);
-          doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-          doc.text(currentCompany?.name || "Company", 36, y + 4);
-          y += 16;
-        } catch {
-          doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-          doc.text(currentCompany?.name || "Company", 14, y); y += 8;
-        }
-      } else {
-        doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 30, "F");
-        doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
-        doc.text(currentCompany?.name || "Company", 14, 13);
-        doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(180);
-        doc.text([currentCompany?.vatNumber ? `VAT: ${currentCompany.vatNumber}` : "", currentCompany?.phone || "", currentCompany?.city || ""].filter(Boolean).join("   "), 14, 22);
-        y = 40;
+          const lb = await loadImageAsBase64(logoUrl);
+          pageDoc.addImage(lb, "PNG", pw/2 - 15, 6, 30, 26);
+        } catch {}
       }
-    }
-    doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-    doc.text("QUOTATION", 14, y); y += 8;
-    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-    doc.text(`Number: ${q.quotationNumber}`, 14, y); doc.text(`Date: ${q.issueDate}`, pw/2, y); y += 5;
-    doc.text(`Valid Until: ${q.expiryDate}`, 14, y);
-    if (q.revision > 0) doc.text(`Revision: ${q.revision}`, pw/2, y); y += 5;
-    if (q.projectName) { doc.text(`Project: ${q.projectName}`, 14, y); y += 5; }
-    if (q.paymentTerms) { doc.text(`Payment Terms: ${q.paymentTerms}`, 14, y); y += 5; }
-    if (q.location) { doc.text(`Location: ${q.location}`, 14, y); y += 5; }
-    y += 2; doc.setDrawColor(200); doc.line(14, y, pw-14, y); y += 6;
-    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-    doc.text("TO:", 14, y); y += 5;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(60);
-    doc.text(q.customerName, 14, y); y += 4;
-    if (q.attn) { doc.text(`Attn: ${q.attn}`, 14, y); y += 4; }
-    if (q.clientPhone) { doc.text(`Tel: ${q.clientPhone}`, 14, y); y += 4; }
-    if (q.clientEmail) { doc.text(`Email: ${q.clientEmail}`, 14, y); y += 4; }
-    y += 4;
-    const useSections = q.sections && q.sections.length > 0;
-    if (useSections) {
-      for (const sec of q.sections!) {
-        if (sec.title) {
-          doc.setFillColor(46, 95, 138);
-          doc.rect(14, y, pw-28, 7, "F");
-          doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
-          doc.text(`${sec.letter}. ${sec.title.toUpperCase()}`, pw/2, y+5, { align: "center" });
-          y += 9;
-        }
-        const body = sec.items.map((i, idx) => [
-          String(idx+1), i.description, String(i.qty), i.unit,
-          formatCurrency(i.unitPrice, language), `${i.vatRate}%`,
-          formatCurrency(i.totalAmount, language),
-        ]);
-        autoTable(doc, {
-          head: [["#","Description","Qty","Unit","Unit Price","VAT %","Total"]],
-          body, startY: y, theme: "grid",
-          headStyles: { fillColor: [15,23,42], textColor: 255, fontStyle: "bold", fontSize: 7 },
-          alternateRowStyles: { fillColor: [248,250,252] },
-          styles: { fontSize: 7, cellPadding: 2 },
-          margin: { left: 14, right: 14 },
-        });
-        y = (doc as any).lastAutoTable.finalY + 6;
+      pageDoc.setFontSize(11); pageDoc.setFont("helvetica", "bold"); pageDoc.setTextColor(15, 23, 42);
+      pageDoc.text(currentCompany?.name || "", ML, 10);
+      pageDoc.setFontSize(7); pageDoc.setFont("helvetica", "normal"); pageDoc.setTextColor(60);
+      const leftLines = [
+        (currentCompany as any)?.address || "",
+        (currentCompany as any)?.city ? `${(currentCompany as any).city}, Kingdom of Saudi Arabia` : "",
+        (currentCompany as any)?.email || "",
+        currentCompany?.phone || "",
+        currentCompany?.vatNumber ? `VAT number ${currentCompany.vatNumber}` : "",
+        currentCompany?.crNumber ? `CR Number ${currentCompany.crNumber}` : "",
+      ].filter(Boolean);
+      let ly = 15;
+      leftLines.forEach(line => { pageDoc.text(line, ML, ly); ly += 4; });
+      // Right col — company AR
+      if (currentCompany?.nameAr) {
+        pageDoc.setFontSize(11); pageDoc.setFont("helvetica", "bold"); pageDoc.setTextColor(15, 23, 42);
+        pageDoc.text(currentCompany.nameAr, pw - MR, 10, { align: "right" });
+        pageDoc.setFontSize(7); pageDoc.setFont("helvetica", "normal"); pageDoc.setTextColor(60);
+        const rightLines = [
+          (currentCompany as any)?.addressAr || (currentCompany as any)?.address || "",
+          currentCompany?.vatNumber ? `رقم التسجيل الضريبي ${currentCompany.vatNumber}` : "",
+          currentCompany?.crNumber ? `رقم السجل التجاري ${currentCompany.crNumber}` : "",
+        ].filter(Boolean);
+        let ry = 15;
+        rightLines.forEach(line => { pageDoc.text(line, pw - MR, ry, { align: "right" }); ry += 4; });
       }
-    } else {
-      const body = q.lineItems.map((l, i) => [
-        String(i+1), l.name, String(l.qty), l.unit,
-        formatCurrency(l.unitPrice, language), `${l.vatRate}%`,
-        formatCurrency(l.lineTotal, language),
-      ]);
-      autoTable(doc, {
-        head: [["#","Description","Qty","Unit","Unit Price","VAT %","Total"]],
-        body, startY: y, theme: "grid",
-        headStyles: { fillColor: [15,23,42], textColor: 255, fontStyle: "bold", fontSize: 7 },
-        alternateRowStyles: { fillColor: [248,250,252] },
-        styles: { fontSize: 7, cellPadding: 2 },
-        margin: { left: 14, right: 14 },
-      });
-      y = (doc as any).lastAutoTable.finalY + 6;
-    }
-    autoTable(doc, {
-      body: [["Subtotal", formatCurrency(q.subtotal, language)], ["VAT", formatCurrency(q.totalVat, language)], ["Grand Total", formatCurrency(q.grandTotal, language)]],
-      startY: y, theme: "plain",
-      styles: { fontSize: 8, cellPadding: 2 },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 40 }, 1: { halign: "right" } },
-      margin: { left: pw-80, right: 14 },
-    });
-    y = (doc as any).lastAutoTable.finalY + 10;
-    // Payment Terms list
-    const ptList: string[] = (q as any).paymentTermsList?.filter(Boolean) || (q.paymentTerms ? [q.paymentTerms] : []);
-    if (ptList.length > 0) {
-      const ph_check = doc.internal.pageSize.getHeight();
-      if (y + 10 + ptList.length * 6 > ph_check - 30) { doc.addPage(); y = 20; }
-      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42);
-      doc.text("PAYMENT TERMS", 14, y); y += 5;
-      doc.setFont("helvetica","normal"); doc.setTextColor(60);
-      ptList.forEach(t => { doc.text(`• ${t}`, 18, y, { maxWidth: pw-32 }); y += 5; });
-      y += 4;
-    }
-    // T&C list
-    const tcList: string[] = (q as any).termsList?.filter(Boolean) || (q.terms ? q.terms.split("\n").filter(Boolean) : []);
-    if (tcList.length > 0) {
-      const ph_check2 = doc.internal.pageSize.getHeight();
-      if (y + 10 + tcList.length * 6 > ph_check2 - 30) { doc.addPage(); y = 20; }
-      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42);
-      doc.text("TERMS & CONDITIONS", 14, y); y += 5;
-      doc.setFont("helvetica","normal"); doc.setTextColor(60);
-      tcList.forEach((t, i) => { doc.text(`${i+1}. ${t}`, 18, y, { maxWidth: pw-32 }); y += 5; });
-      y += 4;
-    }
-    if (q.notes) { doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.text("Notes:", 14, y); y+=4; doc.setFont("helvetica","normal"); doc.setTextColor(80); doc.text(q.notes, 14, y, { maxWidth: pw-28 }); y += 10; }
+      pageDoc.setDrawColor(200); pageDoc.line(ML, lhH, pw - MR, lhH);
+      return lhH + 5;
+    };
 
-    // ── Signatory + Stamp ─────────────────────────────────────────────────
-    const selectedSig = o.sigId ? expSignatories.find((s: any) => s.id === o.sigId) : null;
-    if (selectedSig || (o.stamp && (currentCompany as any)?.stamp)) {
-      const ph2 = doc.internal.pageSize.getHeight();
-      if (y + 50 > ph2 - 20) { doc.addPage(); y = 20; }
-      doc.setDrawColor(200); doc.line(14, y, pw - 14, y); y += 8;
-      if (selectedSig) {
-        if (o.includeSig && selectedSig.signatureUrl) {
-          try { const sb = await loadImageAsBase64(selectedSig.signatureUrl); doc.addImage(sb, "PNG", 14, y, 50, 18); y += 20; } catch {}
+    y = await addLetterhead(doc);
+    if (y === 0) y = 12;
+
+    // ── QUOTATION Title (centered) ──────────────────────────────────────────
+    doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+    doc.text("QUOTATION", pw / 2, y + 10, { align: "center" });
+    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(120);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, pw / 2, y + 16, { align: "center" });
+    y += 24;
+
+    // Divider
+    doc.setDrawColor(220); doc.line(ML, y, pw - MR, y); y += 6;
+
+    // ── Two-column client + quotation info table ─────────────────────────────
+    const col1x = ML; const col2x = pw / 2 + 5;
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+    const labelW = 20;
+    const infoRows: [string, string, string, string][] = [
+      ["To:",       q.customerName,          "Date:",         q.issueDate],
+      ["Attn:",     q.attn || "",            "Quotation #:",  q.quotationNumber],
+      ["Phone:",    q.clientPhone || "",     "Project:",      q.projectName || ""],
+      ["Email:",    q.clientEmail || "",     "Location:",     q.location || ""],
+    ];
+    if (q.revision > 0) infoRows.push(["", "", "Revision:", String(q.revision)]);
+
+    infoRows.forEach(([l1, v1, l2, v2]) => {
+      doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+      if (l1) doc.text(l1, col1x, y);
+      if (l2) doc.text(l2, col2x, y);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(60);
+      if (v1) doc.text(v1, col1x + labelW, y, { maxWidth: pw/2 - labelW - 5 });
+      if (v2) doc.text(v2, col2x + labelW, y, { maxWidth: pw/2 - labelW - MR });
+      y += 6;
+    });
+    y += 3;
+    doc.setDrawColor(220); doc.line(ML, y, pw - MR, y); y += 6;
+
+    // ── Opening salutation ──────────────────────────────────────────────────
+    if (q.attn || q.notes) {
+      doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+      doc.text("Kind Attn:", ML, y);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(60);
+      doc.text(`Dear ${q.attn || "Sir/Madam"};`, ML + 22, y); y += 6;
+      if (q.notes) {
+        doc.text(q.notes, ML, y, { maxWidth: TW }); y += 10;
+      } else {
+        doc.text("Thank you for providing us the opportunity to quote. Please find our best prices below.", ML, y, { maxWidth: TW }); y += 10;
+      }
+    }
+
+    // ── Items Table Header ──────────────────────────────────────────────────
+    doc.setFillColor(99, 102, 241); // indigo header
+    doc.rect(ML, y, TW, 8, "F");
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
+    doc.text("QUOTATION ITEMS", pw / 2, y + 5.5, { align: "center" });
+    y += 10;
+
+    // ── Items ───────────────────────────────────────────────────────────────
+    const useSections = q.sections && q.sections.length > 0;
+    const allItems: any[] = [];
+
+    if (useSections) {
+      q.sections!.forEach(sec => {
+        if (sec.title) {
+          allItems.push({
+            sno: `${sec.letter}`,
+            desc: sec.title.toUpperCase(),
+            qty: null, unit: null, unitPrice: null,
+            net: null, vat: null, total: null,
+            isHeader: true,
+          });
         }
-        doc.setDrawColor(150); doc.line(14, y + 2, 70, y + 2);
-        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-        doc.text(selectedSig.name, 14, y + 8);
-        doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-        doc.text(selectedSig.designation || "", 14, y + 13);
-        doc.setFontSize(7); doc.setTextColor(150);
-        doc.text(language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory", 14, y + 18);
+        sec.items.forEach((item, idx) => {
+          allItems.push({
+            sno: String(idx + 1),
+            desc: item.description,
+            qty: item.qty, unit: item.unit,
+            unitPrice: item.unitPrice,
+            net: item.amount,
+            vat: item.vatAmount,
+            total: item.totalAmount,
+            isHeader: false,
+          });
+        });
+      });
+    } else {
+      q.lineItems.forEach((l, idx) => {
+        allItems.push({
+          sno: String(idx + 1),
+          desc: l.name,
+          qty: l.qty, unit: l.unit,
+          unitPrice: l.unitPrice,
+          net: l.lineTotal - l.vatAmount,
+          vat: l.vatAmount,
+          total: l.lineTotal,
+          isHeader: false,
+        });
+      });
+    }
+
+    const tableBody = allItems.map(item => [
+      item.sno,
+      item.desc,
+      item.qty !== null ? String(item.qty) : "",
+      item.unit || "",
+      item.unitPrice !== null ? item.unitPrice.toFixed(2) : "",
+      item.net !== null ? item.net.toFixed(2) : "",
+      item.vat !== null ? item.vat.toFixed(2) : "",
+      item.total !== null ? item.total.toFixed(2) : "",
+    ]);
+
+    const didDrawPage = (data: any) => {
+      // Re-draw letterhead on continuation pages
+      if (data.pageNumber > 1) {
+        if (o.letterhead) addLetterhead(doc);
+      }
+    };
+
+    autoTable(doc, {
+      head: [["S/No", "Description", "Qty", "Unit", "Unit Price", "Net Amnt", "VAT", "Total Amount"]],
+      body: tableBody,
+      startY: y,
+      theme: "grid",
+      headStyles: {
+        fillColor: [30, 30, 50], textColor: 255, fontStyle: "bold", fontSize: 7,
+        halign: "center", valign: "middle", cellPadding: 3,
+      },
+      bodyStyles: { fontSize: 7, cellPadding: 3, textColor: [40, 40, 40] },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
+      columnStyles: {
+        0: { cellWidth: 10, halign: "center" },
+        1: { cellWidth: "auto" },
+        2: { cellWidth: 12, halign: "center" },
+        3: { cellWidth: 14, halign: "center" },
+        4: { cellWidth: 22, halign: "right" },
+        5: { cellWidth: 22, halign: "right" },
+        6: { cellWidth: 16, halign: "right" },
+        7: { cellWidth: 24, halign: "right" },
+      },
+      didParseCell: (data: any) => {
+        const rowIdx = data.row.index;
+        if (allItems[rowIdx]?.isHeader) {
+          data.cell.styles.fillColor = [46, 95, 138];
+          data.cell.styles.textColor = [255, 255, 255];
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.colSpan = 8;
+        }
+      },
+      willDrawPage: didDrawPage,
+      margin: { left: ML, right: MR, top: o.letterhead ? 20 : 10 },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 6;
+
+    // ── Totals (right-aligned, styled) ──────────────────────────────────────
+    const totW = 80; const totX = pw - MR - totW;
+    const totRows = [
+      { label: "TOTAL NET", value: q.subtotal.toFixed(2), bg: [238,238,238] as [number,number,number], bold: false },
+      { label: "TOTAL VAT", value: q.totalVat.toFixed(2),  bg: [238,238,238] as [number,number,number], bold: false },
+      { label: "GRAND TOTAL (SAR)", value: q.grandTotal.toFixed(2), bg: [27,58,92] as [number,number,number], bold: true, white: true },
+    ];
+    totRows.forEach(row => {
+      doc.setFillColor(row.bg[0], row.bg[1], row.bg[2]);
+      doc.rect(totX, y, totW, 8, "F");
+      doc.setFontSize(8);
+      doc.setFont("helvetica", row.bold ? "bold" : "normal");
+      doc.setTextColor(row.white ? 255 : 40);
+      doc.text(row.label, totX + 3, y + 5.5);
+      doc.text(row.value, pw - MR - 3, y + 5.5, { align: "right" });
+      y += 8;
+    });
+    y += 10;
+
+    // ── T&C + Payment Terms on same/next page ───────────────────────────────
+    const tcList: string[] = (q as any).termsList?.filter(Boolean) || (q.terms ? q.terms.split("\n").filter(Boolean) : []);
+    const ptList: string[] = (q as any).paymentTermsList?.filter(Boolean) || (q.paymentTerms ? [q.paymentTerms] : []);
+
+    const selectedSig = o.sigId ? expSignatories.find((s: any) => s.id === o.sigId) : null;
+
+    const needsNewPage = y + (tcList.length * 6) + (ptList.length * 6) + 40 > ph_total - 30;
+    if (needsNewPage) { doc.addPage(); y = o.letterhead ? await addLetterhead(doc) : 15; }
+
+    if (tcList.length > 0) {
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+      doc.text("Terms and Conditions:", ML, y); y += 6;
+      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
+      tcList.forEach((t, i) => {
+        const lines = doc.splitTextToSize(`${i+1}. ${t}`, TW - 4);
+        doc.text(lines, ML, y); y += lines.length * 5;
+      });
+      y += 5;
+    }
+
+    if (ptList.length > 0) {
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+      doc.text("Payment Terms:", ML, y); y += 6;
+      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
+      ptList.forEach(t => {
+        const lines = doc.splitTextToSize(`- ${t}`, TW - 4);
+        doc.text(lines, ML, y); y += lines.length * 5;
+      });
+      y += 5;
+    }
+
+    // ── Authorized Signatory + Stamp ────────────────────────────────────────
+    if (selectedSig || (o.stamp && (currentCompany as any)?.stamp)) {
+      if (y + 50 > ph_total - 20) { doc.addPage(); y = o.letterhead ? await addLetterhead(doc) : 15; }
+      y += 4;
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+      doc.text("Authorized Signatory:", ML, y); y += 8;
+      if (selectedSig) {
+        if (o.includeSig && (selectedSig as any).signatureUrl) {
+          try { const sb = await loadImageAsBase64((selectedSig as any).signatureUrl); doc.addImage(sb, "PNG", ML, y, 50, 18); y += 20; } catch {}
+        }
+        doc.setDrawColor(150); doc.line(ML, y, ML + 60, y); y += 4;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(15, 23, 42);
+        doc.text(selectedSig.name, ML, y); y += 5;
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(80);
+        doc.text(selectedSig.designation || "", ML, y);
       }
       if (o.stamp && (currentCompany as any)?.stamp) {
-        try { const stb = await loadImageAsBase64((currentCompany as any).stamp); doc.addImage(stb, "PNG", pw - 55, y - 5, 40, 40); } catch {}
+        try { const stb = await loadImageAsBase64((currentCompany as any).stamp); doc.addImage(stb, "PNG", pw - MR - 45, y - 40, 40, 40); } catch {}
       }
     }
+
     const ph = doc.internal.pageSize.getHeight();
     const total = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= total; i++) { doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150); doc.text(`Page ${i} of ${total}`, pw-14, ph-8, { align: "right" }); doc.text("Safqa — ZATCA Compliant ERP", 14, ph-8); }
