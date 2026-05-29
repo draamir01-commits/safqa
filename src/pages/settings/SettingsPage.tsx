@@ -130,6 +130,20 @@ export const SettingsPage: React.FC = () => {
   const [importProgress, setImportProgress] = React.useState<{ current: number; total: number; collection: string } | null>(null);
   const [importResult, setImportResult] = React.useState<{ success: number; failed: number } | null>(null);
   const importFileRef = React.useRef<HTMLInputElement>(null);
+  const lhFileRef = React.useRef<HTMLInputElement>(null);
+  const footerFileRef = React.useRef<HTMLInputElement>(null);
+  const sigFileRef = React.useRef<HTMLInputElement>(null);
+  const [newLHFile, setNewLHFile] = React.useState<string>("");
+  const [uploadingLH, setUploadingLH] = React.useState(false);
+
+  // Convert file to base64
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
   // Load company data into form
   React.useEffect(() => {
@@ -490,38 +504,95 @@ export const SettingsPage: React.FC = () => {
                     ? "أضف ترويسات متعددة للشركة — تظهر كخيارات عند تصدير المستندات"
                     : "Add multiple letterheads for your company — selectable when exporting documents"}
                 </p>
-                <div className="space-y-3">
-                  {additionalLetterheads.map(lh => (
-                    <div key={lh.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                      <ImageIcon className="h-8 w-8 text-slate-300 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-700 truncate">{lh.name}</p>
-                        <p className="text-xs text-slate-400 truncate">{lh.url ? "✓ Image uploaded" : "No image"}</p>
+
+                {/* Existing letterheads */}
+                {additionalLetterheads.length > 0 && (
+                  <div className="space-y-3">
+                    {additionalLetterheads.map(lh => (
+                      <div key={lh.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        {lh.url ? (
+                          <img src={lh.url} alt={lh.name} className="h-10 w-16 object-contain rounded border border-slate-200 bg-white shrink-0" />
+                        ) : (
+                          <div className="h-10 w-16 bg-slate-100 rounded border border-slate-200 flex items-center justify-center shrink-0">
+                            <ImageIcon className="h-5 w-5 text-slate-300" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-700 truncate">{lh.name}</p>
+                          <p className="text-xs text-slate-400">{lh.url ? (language === "ar" ? "✓ تم رفع الصورة" : "✓ Image uploaded") : (language === "ar" ? "لا توجد صورة" : "No image")}</p>
+                        </div>
+                        <button onClick={() => setAdditionalLetterheads(p => p.filter(x => x.id !== lh.id))}
+                          className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg shrink-0">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
-                      <button onClick={() => setAdditionalLetterheads(p => p.filter(x => x.id !== lh.id))}
-                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-3">
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new letterhead */}
+                <div className="border border-dashed border-slate-200 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-slate-600">{language === "ar" ? "إضافة ترويسة جديدة" : "Add New Letterhead"}</p>
                   <input
                     value={newLHName}
                     onChange={e => setNewLHName(e.target.value)}
-                    placeholder={language === "ar" ? "اسم الترويسة..." : "Letterhead name..."}
-                    className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
+                    placeholder={language === "ar" ? "اسم الترويسة (مثال: الفرع الرئيسي)" : "Letterhead name (e.g. Main Branch)"}
+                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-primary/20"
                   />
+
+                  {/* File upload button */}
+                  <div
+                    onClick={() => lhFileRef.current?.click()}
+                    className="flex items-center gap-3 p-3 border border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors"
+                  >
+                    {newLHFile ? (
+                      <img src={newLHFile} alt="preview" className="h-12 object-contain rounded border border-slate-200 bg-white" />
+                    ) : (
+                      <div className="h-12 w-20 bg-slate-100 rounded border border-slate-200 flex items-center justify-center shrink-0">
+                        <Upload className="h-5 w-5 text-slate-300" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-semibold text-slate-600">
+                        {newLHFile
+                          ? (language === "ar" ? "تم اختيار الصورة — انقر لتغييرها" : "Image selected — click to change")
+                          : (language === "ar" ? "انقر لرفع صورة الترويسة" : "Click to upload letterhead image")}
+                      </p>
+                      <p className="text-xs text-slate-400">{language === "ar" ? "PNG, JPG — الحجم الموصى به: 900×200 بكسل" : "PNG, JPG — Recommended size: 900×200px"}</p>
+                    </div>
+                    <input
+                      ref={lhFileRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const b64 = await fileToBase64(file);
+                        setNewLHFile(b64);
+                      }}
+                    />
+                  </div>
+
                   <Button
                     onClick={() => {
-                      if (!newLHName.trim()) return;
-                      setAdditionalLetterheads(p => [...p, { id: Math.random().toString(36).slice(2), name: newLHName.trim(), url: newLHUrl }]);
-                      setNewLHName(""); setNewLHUrl("");
+                      if (!newLHName.trim()) {
+                        toast.error(language === "ar" ? "أدخل اسم الترويسة" : "Enter a letterhead name");
+                        return;
+                      }
+                      setAdditionalLetterheads(p => [...p, {
+                        id: Math.random().toString(36).slice(2),
+                        name: newLHName.trim(),
+                        url: newLHFile,
+                      }]);
+                      setNewLHName("");
+                      setNewLHFile("");
+                      if (lhFileRef.current) lhFileRef.current.value = "";
                     }}
-                    className="flex items-center gap-2 text-xs"
+                    className="flex items-center gap-2 text-xs w-full justify-center"
                   >
                     <Plus className="h-4 w-4" />
-                    {language === "ar" ? "إضافة" : "Add"}
+                    {language === "ar" ? "إضافة الترويسة" : "Add Letterhead"}
                   </Button>
                 </div>
               </div>
@@ -534,14 +605,39 @@ export const SettingsPage: React.FC = () => {
                 <p className="text-xs text-slate-500">
                   {language === "ar" ? "صورة عرضية كاملة تظهر أسفل جميع المستندات المصدرة" : "Full-width image displayed at the bottom of all exported documents"}
                 </p>
-                <Input
-                  label={language === "ar" ? "رابط صورة التذييل" : "Footer Image URL"}
-                  value={footerAssetUrl}
-                  onChange={e => setFooterAssetUrl(e.target.value)}
-                  placeholder="https://..."
-                />
+                <div
+                  onClick={() => footerFileRef.current?.click()}
+                  className="flex items-center gap-4 p-4 border border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors"
+                >
+                  {footerAssetUrl ? (
+                    <img src={footerAssetUrl} alt="footer" className="h-14 w-full object-cover rounded-lg border border-slate-200" />
+                  ) : (
+                    <div className="w-full h-14 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center gap-2 text-slate-400">
+                      <Upload className="h-5 w-5" />
+                      <span className="text-sm">{language === "ar" ? "انقر لرفع صورة التذييل" : "Click to upload footer image"}</span>
+                    </div>
+                  )}
+                  <input
+                    ref={footerFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const b64 = await fileToBase64(file);
+                      setFooterAssetUrl(b64);
+                    }}
+                  />
+                </div>
                 {footerAssetUrl && (
-                  <img src={footerAssetUrl} alt="footer preview" className="w-full h-16 object-cover rounded-xl border border-slate-200" />
+                  <button
+                    onClick={() => setFooterAssetUrl("")}
+                    className="text-xs text-red-500 hover:underline flex items-center gap-1"
+                  >
+                    <X className="h-3 w-3" />
+                    {language === "ar" ? "إزالة صورة التذييل" : "Remove footer image"}
+                  </button>
                 )}
               </div>
 
@@ -828,10 +924,46 @@ export const SettingsPage: React.FC = () => {
         <div className="flex flex-col gap-4">
           <Input label={language === "ar" ? "الاسم الكامل" : "Full Name"} value={sigName} onChange={e => setSigName(e.target.value)} placeholder={language === "ar" ? "مثال: أحمد محمد" : "e.g. John Smith"} />
           <Input label={language === "ar" ? "المسمى الوظيفي" : "Designation"} value={sigDesignation} onChange={e => setSigDesignation(e.target.value)} placeholder={language === "ar" ? "مثال: المدير المالي" : "e.g. Chief Financial Officer"} />
-          <Input label={language === "ar" ? "رابط صورة التوقيع الرقمي (اختياري)" : "Digital Signature Image URL (optional)"} value={sigSignatureUrl} onChange={e => setSigSignatureUrl(e.target.value)} placeholder="https://..." />
-          {sigSignatureUrl && (
-            <img src={sigSignatureUrl} alt="signature preview" className="h-16 object-contain border border-slate-200 rounded-lg p-2" />
-          )}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-700">
+              {language === "ar" ? "صورة التوقيع الرقمي (اختياري)" : "Digital Signature Image (optional)"}
+            </label>
+            <div
+              onClick={() => sigFileRef.current?.click()}
+              className="flex items-center gap-3 p-3 border border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors"
+            >
+              {sigSignatureUrl ? (
+                <img src={sigSignatureUrl} alt="signature" className="h-14 object-contain border border-slate-200 rounded-lg bg-white p-1 max-w-full" />
+              ) : (
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Upload className="h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">{language === "ar" ? "انقر لرفع صورة التوقيع" : "Click to upload signature image"}</p>
+                    <p className="text-xs text-slate-300">{language === "ar" ? "PNG شفاف موصى به" : "Transparent PNG recommended"}</p>
+                  </div>
+                </div>
+              )}
+              <input
+                ref={sigFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const b64 = await fileToBase64(file);
+                  setSigSignatureUrl(b64);
+                  if (sigFileRef.current) sigFileRef.current.value = "";
+                }}
+              />
+            </div>
+            {sigSignatureUrl && (
+              <button onClick={() => setSigSignatureUrl("")} className="text-xs text-red-500 hover:underline flex items-center gap-1 mt-1">
+                <X className="h-3 w-3" />
+                {language === "ar" ? "إزالة التوقيع" : "Remove signature"}
+              </button>
+            )}
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowSigModal(false)}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
             <Button onClick={handleSaveSig} loading={saving}>{language === "ar" ? "حفظ" : "Save"}</Button>
