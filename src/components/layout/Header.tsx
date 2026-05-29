@@ -4,7 +4,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { logout } from "../../firebase/auth";
-import { LogOut, Menu, User } from "lucide-react";
+import { LogOut, Menu, User, Shield } from "lucide-react";
 import { NotificationCenter } from "../ui/NotificationCenter";
 
 export const Header: React.FC = () => {
@@ -44,6 +44,18 @@ export const Header: React.FC = () => {
         <span className="hidden md:inline-block px-2 py-1 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">
           SANDBOX | تجريبي
         </span>
+
+        {/* SuperAdmin button — only visible to dr.aamir01@gmail.com */}
+        {user?.email === "dr.aamir01@gmail.com" && (
+          <button
+            onClick={() => navigate("/superadmin")}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-indigo-200 bg-indigo-50 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition-colors"
+            title="Super Admin Panel"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Super Admin</span>
+          </button>
+        )}
 
         <NotificationCenter />
 
