@@ -145,6 +145,8 @@ export const QuotationsPage: React.FC = () => {
   const [paymentTerms, setPaymentTerms] = React.useState("Net 30");
   const [notes, setNotes]               = React.useState("");
   const [terms, setTerms]               = React.useState("");
+  const [paymentTermsList, setPaymentTermsList] = React.useState<string[]>([""]);
+  const [termsList, setTermsList]               = React.useState<string[]>([""]);
   const [sections, setSections]         = React.useState<QuotationSection[]>([emptySection(0)]);
 
   // Computed totals from sections
@@ -211,6 +213,8 @@ export const QuotationsPage: React.FC = () => {
     setCustomerId(""); setAttn(""); setClientPhone(""); setClientEmail("");
     setLocation(""); setProjectName(""); setPaymentTerms("Net 30");
     setNotes(""); setTerms("");
+    setPaymentTermsList([""]);
+    setTermsList([""]);
     setIssueDate(new Date().toISOString().split("T")[0]);
     setExpiryDate(new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]);
     setSections([emptySection(0)]);
@@ -223,6 +227,8 @@ export const QuotationsPage: React.FC = () => {
     setClientEmail(q.clientEmail || ""); setLocation(q.location || "");
     setProjectName(q.projectName || ""); setPaymentTerms(q.paymentTerms || "Net 30");
     setNotes(q.notes || ""); setTerms(q.terms || "");
+    setPaymentTermsList((q as any).paymentTermsList?.length ? (q as any).paymentTermsList : [q.paymentTerms || ""]);
+    setTermsList((q as any).termsList?.length ? (q as any).termsList : (q.terms ? q.terms.split("\n").filter(Boolean) : [""]));
     setIssueDate(q.issueDate); setExpiryDate(q.expiryDate);
     // Load sections or convert legacy lineItems
     if (q.sections && q.sections.length > 0) {
@@ -265,7 +271,10 @@ export const QuotationsPage: React.FC = () => {
       );
       const data: any = {
         customerId, customerName: customer.name, customerNameAr: customer.nameAr,
-        attn, clientPhone, clientEmail, location, projectName, paymentTerms, terms,
+        attn, clientPhone, clientEmail, location, projectName, paymentTerms,
+        terms: termsList.filter(t => t.trim()).join("\n"),
+        paymentTermsList: paymentTermsList.filter(t => t.trim()),
+        termsList: termsList.filter(t => t.trim()),
         issueDate, expiryDate, notes,
         sections,
         lineItems,
@@ -472,8 +481,29 @@ export const QuotationsPage: React.FC = () => {
       margin: { left: pw-80, right: 14 },
     });
     y = (doc as any).lastAutoTable.finalY + 10;
-    if (q.notes) { doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.text("Notes:", 14, y); y+=4; doc.setFont("helvetica","normal"); doc.setTextColor(80); doc.text(q.notes, 14, y, { maxWidth: pw-28 }); y+=10; }
-    if (q.terms) { doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.text("Terms & Conditions:", 14, y); y+=4; doc.setFont("helvetica","normal"); doc.setTextColor(80); doc.text(q.terms, 14, y, { maxWidth: pw-28 }); y += 14; }
+    // Payment Terms list
+    const ptList: string[] = (q as any).paymentTermsList?.filter(Boolean) || (q.paymentTerms ? [q.paymentTerms] : []);
+    if (ptList.length > 0) {
+      const ph_check = doc.internal.pageSize.getHeight();
+      if (y + 10 + ptList.length * 6 > ph_check - 30) { doc.addPage(); y = 20; }
+      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42);
+      doc.text("PAYMENT TERMS", 14, y); y += 5;
+      doc.setFont("helvetica","normal"); doc.setTextColor(60);
+      ptList.forEach(t => { doc.text(`• ${t}`, 18, y, { maxWidth: pw-32 }); y += 5; });
+      y += 4;
+    }
+    // T&C list
+    const tcList: string[] = (q as any).termsList?.filter(Boolean) || (q.terms ? q.terms.split("\n").filter(Boolean) : []);
+    if (tcList.length > 0) {
+      const ph_check2 = doc.internal.pageSize.getHeight();
+      if (y + 10 + tcList.length * 6 > ph_check2 - 30) { doc.addPage(); y = 20; }
+      doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42);
+      doc.text("TERMS & CONDITIONS", 14, y); y += 5;
+      doc.setFont("helvetica","normal"); doc.setTextColor(60);
+      tcList.forEach((t, i) => { doc.text(`${i+1}. ${t}`, 18, y, { maxWidth: pw-32 }); y += 5; });
+      y += 4;
+    }
+    if (q.notes) { doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.text("Notes:", 14, y); y+=4; doc.setFont("helvetica","normal"); doc.setTextColor(80); doc.text(q.notes, 14, y, { maxWidth: pw-28 }); y += 10; }
 
     // ── Signatory + Stamp ─────────────────────────────────────────────────
     const selectedSig = o.sigId ? expSignatories.find((s: any) => s.id === o.sigId) : null;
@@ -822,20 +852,91 @@ export const QuotationsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* ── Section 4: Notes & Terms ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-slate-700">{language==="ar"?"ملاحظات":"Notes"}</label>
-              <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3}
-                placeholder={language==="ar"?"ملاحظات عامة...":"General notes..."}
-                className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 resize-none"/>
+          {/* ── Section 4: Payment Terms & T&C as line items ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            {/* Payment Terms */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                  {language==="ar"?"شروط الدفع":"Payment Terms"}
+                </p>
+              </div>
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                {paymentTermsList.map((term, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 group">
+                    <div className="h-5 w-5 rounded bg-brand-primary/10 flex items-center justify-center shrink-0">
+                      <svg className="h-3 w-3 text-brand-primary" fill="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20" stroke="white" strokeWidth="2"/></svg>
+                    </div>
+                    <input
+                      value={term}
+                      onChange={e => setPaymentTermsList(prev => prev.map((t, i) => i === idx ? e.target.value : t))}
+                      placeholder={language==="ar"?"أدخل شرط دفع...":"Enter payment term..."}
+                      className="flex-1 text-sm bg-transparent focus:outline-none text-slate-700 placeholder-slate-300"
+                    />
+                    <button
+                      onClick={() => setPaymentTermsList(prev => prev.filter((_, i) => i !== idx))}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all rounded"
+                    >
+                      <Trash2 className="h-3.5 w-3.5"/>
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setPaymentTermsList(prev => [...prev, ""])}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-brand-primary hover:bg-blue-50 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5"/>
+                  {language==="ar"?"إضافة شرط دفع":"ADD PAYMENT TERM"}
+                </button>
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-slate-700">{language==="ar"?"الشروط والأحكام":"Terms & Conditions"}</label>
-              <textarea value={terms} onChange={e=>setTerms(e.target.value)} rows={3}
-                placeholder={language==="ar"?"شروط وأحكام...":"Terms and conditions..."}
-                className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 resize-none"/>
+
+            {/* Terms & Conditions */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                  {language==="ar"?"الشروط والأحكام":"Terms & Conditions"}
+                </p>
+              </div>
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                {termsList.map((term, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 group">
+                    <div className="h-5 w-5 rounded bg-slate-100 flex items-center justify-center shrink-0 text-[10px] font-bold text-slate-400">
+                      {idx + 1}
+                    </div>
+                    <input
+                      value={term}
+                      onChange={e => setTermsList(prev => prev.map((t, i) => i === idx ? e.target.value : t))}
+                      placeholder={language==="ar"?"أدخل شرطاً...":"Enter term..."}
+                      className="flex-1 text-sm bg-transparent focus:outline-none text-slate-700 placeholder-slate-300"
+                    />
+                    <button
+                      onClick={() => setTermsList(prev => prev.filter((_, i) => i !== idx))}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all rounded"
+                    >
+                      <Trash2 className="h-3.5 w-3.5"/>
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setTermsList(prev => [...prev, ""])}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-brand-primary hover:bg-blue-50 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5"/>
+                  {language==="ar"?"إضافة شرط":"ADD TERM"}
+                </button>
+              </div>
             </div>
+
+          </div>
+
+          {/* Notes */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{language==="ar"?"ملاحظات":"Notes"}</label>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2}
+              placeholder={language==="ar"?"ملاحظات عامة (اختياري)...":"General notes (optional)..."}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 resize-none"/>
           </div>
 
           {/* Save / Cancel */}
@@ -915,7 +1016,34 @@ export const QuotationsPage: React.FC = () => {
               <div className="flex justify-between font-bold text-slate-800"><span>{language==="ar"?"الإجمالي":"Total"}</span><span>{formatCurrency(selected.grandTotal,language)}</span></div>
             </div>
             {selected.notes&&<div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700"><p className="font-semibold mb-1">{language==="ar"?"ملاحظات":"Notes"}</p><p>{selected.notes}</p></div>}
-            {selected.terms&&<div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600"><p className="font-semibold mb-1">{language==="ar"?"الشروط":"Terms"}</p><p className="whitespace-pre-wrap">{selected.terms}</p></div>}
+            {((selected as any).paymentTermsList?.filter(Boolean)||[]).length>0&&(
+              <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700">
+                <p className="font-semibold mb-2 uppercase tracking-wider text-slate-500">{language==="ar"?"شروط الدفع":"Payment Terms"}</p>
+                <div className="space-y-1.5">
+                  {((selected as any).paymentTermsList||[]).filter(Boolean).map((t: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <div className="h-4 w-4 rounded bg-brand-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <svg className="h-2.5 w-2.5 text-brand-primary" fill="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/></svg>
+                      </div>
+                      <span>{t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {((selected as any).termsList?.filter(Boolean)||[]).length>0&&(
+              <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700">
+                <p className="font-semibold mb-2 uppercase tracking-wider text-slate-500">{language==="ar"?"الشروط والأحكام":"Terms & Conditions"}</p>
+                <div className="space-y-1.5">
+                  {((selected as any).termsList||[]).filter(Boolean).map((t: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="font-bold text-slate-400 shrink-0">{i+1}.</span>
+                      <span>{t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={()=>openExportModal(selected)} className="flex items-center gap-2">
                 <Download className="h-4 w-4"/>{language==="ar"?"تصدير PDF":"Export PDF"}
