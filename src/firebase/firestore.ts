@@ -161,6 +161,45 @@ export async function getNextInvoiceNumber(companyId: string, prefix: string = "
   }
 }
 
+export async function getNextQuotationNumber(companyId: string): Promise<{ number: string; counter: number }> {
+  try {
+    const compRef = doc(db, "companies", companyId);
+    const compDoc = await getDoc(compRef);
+    const data = compDoc.exists() ? compDoc.data() : {};
+    const prefix = data.quotationPrefix || "QUO";
+    const counter = (data.quotationCounter || 0) + 1;
+    await updateDoc(compRef, { quotationCounter: increment(1) });
+    const formatted = String(counter).padStart(4, "0");
+    return { number: `${prefix}-${formatted}`, counter };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `companies/${companyId}`);
+    return { number: `QUO-${Date.now().toString().slice(-4)}`, counter: 0 };
+  }
+}
+
+export async function setQuotationCounter(companyId: string, prefix: string, startNumber: number): Promise<void> {
+  try {
+    const compRef = doc(db, "companies", companyId);
+    await updateDoc(compRef, {
+      quotationPrefix: prefix,
+      quotationCounter: startNumber - 1, // -1 so next call returns startNumber
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `companies/${companyId}`);
+  }
+}
+
+export async function getQuotationSettings(companyId: string): Promise<{ prefix: string; counter: number }> {
+  try {
+    const compRef = doc(db, "companies", companyId);
+    const compDoc = await getDoc(compRef);
+    const data = compDoc.exists() ? compDoc.data() : {};
+    return { prefix: data.quotationPrefix || "QUO", counter: data.quotationCounter || 0 };
+  } catch {
+    return { prefix: "QUO", counter: 0 };
+  }
+}
+
 export async function saveInvoice(companyId: string, invoiceId: string, invoiceData: any) {
   const path = `companies/${companyId}/invoices`;
   return createDocumentWithId(path, invoiceId, invoiceData);
