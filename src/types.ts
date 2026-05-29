@@ -393,12 +393,33 @@ export enum AccountType {
 
 export type QuotationStatus = "draft" | "sent" | "accepted" | "rejected" | "expired" | "converted";
 
+export interface QuotationRevisionSnapshot {
+  revision: number;
+  quotationNumber: string;
+  savedAt: string;
+  grandTotal: number;
+  totalVat: number;
+  subtotal: number;
+  notes?: string;
+}
+
 export interface Quotation {
   id: string;
   quotationNumber: string;
+  revision: number;
+  revisionHistory?: QuotationRevisionSnapshot[];
   customerId: string;
   customerName: string;
   customerNameAr: string;
+  // Extra client contact fields
+  attn?: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  location?: string;
+  // Project & terms
+  projectName?: string;
+  paymentTerms?: string;
+  terms?: string;
   issueDate: string;
   expiryDate: string;
   status: QuotationStatus;
