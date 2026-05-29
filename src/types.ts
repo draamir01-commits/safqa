@@ -558,6 +558,8 @@ export interface Income {
   vatInclusive: boolean;
   paymentMethod: string;
   receiptNo?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
   attachments?: string[];
   notes?: string;
   createdBy: string;

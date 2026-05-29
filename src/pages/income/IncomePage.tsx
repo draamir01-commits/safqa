@@ -6,7 +6,7 @@ import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { listenCompanyCollection, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { formatCurrency } from "../../utils/formatters";
-import { Income, CustomerOrSupplier, Project } from "../../types";
+import { Income, CustomerOrSupplier, Project, Invoice } from "../../types";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
@@ -29,6 +29,7 @@ export const IncomePage: React.FC = () => {
   const [income, setIncome] = React.useState<Income[]>([]);
   const [customers, setCustomers] = React.useState<CustomerOrSupplier[]>([]);
   const [projects, setProjects] = React.useState<Project[]>([]);
+  const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -50,6 +51,7 @@ export const IncomePage: React.FC = () => {
   const [vatInclusive, setVatInclusive] = React.useState(false);
   const [paymentMethod, setPaymentMethod] = React.useState("Bank Transfer");
   const [receiptNo, setReceiptNo] = React.useState("");
+  const [invoiceId, setInvoiceId] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [attachments, setAttachments] = React.useState<string[]>([]);
 
@@ -59,7 +61,8 @@ export const IncomePage: React.FC = () => {
       setIncome((d as Income[]).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())));
     const u2 = listenCompanyCollection(currentCompany.id, "customers", d => setCustomers(d as CustomerOrSupplier[]));
     const u3 = listenCompanyCollection(currentCompany.id, "projects", d => setProjects(d as Project[]));
-    return () => { u1(); u2(); u3(); };
+    const u4 = listenCompanyCollection(currentCompany.id, "invoices", d => setInvoices(d as Invoice[]));
+    return () => { u1(); u2(); u3(); u4(); };
   }, [currentCompany]);
 
   const computedVat = React.useMemo(() => {
@@ -139,7 +142,7 @@ export const IncomePage: React.FC = () => {
     setClientId(item.clientId || ""); setProjectId(item.projectId || "");
     setCategory(item.category); setAmount(String(item.amount));
     setVatPercent(String(item.vatPercent)); setVatInclusive(item.vatInclusive || false);
-    setPaymentMethod(item.paymentMethod); setReceiptNo(item.receiptNo || "");
+    setPaymentMethod(item.paymentMethod); setReceiptNo(item.receiptNo || ""); setInvoiceId(item.invoiceId || "");
     setNotes(item.notes || ""); setAttachments(item.attachments || []);
     setShowForm(true);
   };
@@ -148,7 +151,7 @@ export const IncomePage: React.FC = () => {
     setEditingId(null); setDate(new Date().toISOString().split("T")[0]);
     setDescription(""); setDescriptionAr(""); setClientId(""); setProjectId("");
     setCategory("Sales"); setAmount(""); setVatPercent("15"); setVatInclusive(false);
-    setPaymentMethod("Bank Transfer"); setReceiptNo(""); setNotes(""); setAttachments([]);
+    setPaymentMethod("Bank Transfer"); setReceiptNo(""); setInvoiceId(""); setNotes(""); setAttachments([]);
   };
 
   const handleSave = async () => {
@@ -295,6 +298,9 @@ export const IncomePage: React.FC = () => {
                 <td className="px-4 py-3">
                   <p className="font-semibold text-slate-800 text-sm">{language === "ar" ? item.descriptionAr || item.description : item.description}</p>
                   <p className="text-xs text-slate-400">{item.category}</p>
+                  {item.invoiceNumber && (
+                    <p className="text-[10px] text-indigo-500 font-semibold">🧾 {item.invoiceNumber}</p>
+                  )}
                   {item.attachments?.length > 0 && (
                     <button
                       onClick={e => { e.stopPropagation(); setViewingDoc({ url: item.attachments[0], fileName: `income-${item.receiptNo || item.date}` }); }}
@@ -355,7 +361,48 @@ export const IncomePage: React.FC = () => {
           }} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label={language === "ar" ? "التاريخ" : "Date"} type="date" value={date} onChange={e => setDate(e.target.value)} />
-            <Input label={language === "ar" ? "رقم الإيصال (اختياري)" : "Receipt No."} value={receiptNo} onChange={e => setReceiptNo(e.target.value)} placeholder="INV-001" />
+            <Input label={language === "ar" ? "رقم الإيصال (اختياري)" : "Receipt No."} value={receiptNo} onChange={e => setReceiptNo(e.target.value)} placeholder="REC-001" />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-700">
+                {language === "ar" ? "رقم الفاتورة المرتبطة (اختياري)" : "Linked Invoice No. (optional)"}
+              </label>
+              <select
+                value={invoiceId}
+                onChange={e => {
+                  setInvoiceId(e.target.value);
+                  // Auto-fill client when invoice is selected
+                  const inv = invoices.find(i => i.id === e.target.value);
+                  if (inv && !clientId) setClientId(inv.customerId);
+                }}
+                className="text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-primary/20 bg-white"
+              >
+                <option value="">{language === "ar" ? "— بدون فاتورة مرتبطة —" : "— No linked invoice —"}</option>
+                {invoices
+                  .filter(inv => inv.status !== "cancelled")
+                  .sort((a, b) => b.issueDate.localeCompare(a.issueDate))
+                  .map(inv => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoiceNumber} — {inv.customerName} — {inv.grandTotal?.toLocaleString()} SAR ({inv.status})
+                    </option>
+                  ))}
+              </select>
+              {invoiceId && (() => {
+                const inv = invoices.find(i => i.id === invoiceId);
+                if (!inv) return null;
+                return (
+                  <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
+                    <span className="font-bold">{inv.invoiceNumber}</span>
+                    <span>•</span>
+                    <span>{inv.customerName}</span>
+                    <span>•</span>
+                    <span className="font-semibold">{inv.grandTotal?.toLocaleString()} SAR</span>
+                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold ${inv.status === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                      {inv.status}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
             <Input label={language === "ar" ? "الوصف (إنجليزي)" : "Description (EN)"} value={description} onChange={e => setDescription(e.target.value)} className="md:col-span-2" />
             <Input label={language === "ar" ? "الوصف (عربي)" : "Description (AR)"} value={descriptionAr} onChange={e => setDescriptionAr(e.target.value)} className="md:col-span-2" />
             <Select label={language === "ar" ? "العميل" : "Client"} value={clientId} onChange={e => setClientId(e.target.value)}
