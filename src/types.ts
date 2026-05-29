@@ -403,6 +403,26 @@ export interface QuotationRevisionSnapshot {
   notes?: string;
 }
 
+export interface QuotationItem {
+  id: string;
+  description: string;
+  descriptionAr?: string;
+  qty: number;
+  unit: string;
+  unitPrice: number;
+  vatRate: number;
+  vatAmount: number;
+  amount: number;       // net
+  totalAmount: number;  // net + vat
+}
+
+export interface QuotationSection {
+  id: string;
+  letter: string;
+  title: string;
+  items: QuotationItem[];
+}
+
 export interface Quotation {
   id: string;
   quotationNumber: string;
@@ -411,18 +431,19 @@ export interface Quotation {
   customerId: string;
   customerName: string;
   customerNameAr: string;
-  // Extra client contact fields
   attn?: string;
   clientPhone?: string;
   clientEmail?: string;
   location?: string;
-  // Project & terms
   projectName?: string;
   paymentTerms?: string;
   terms?: string;
   issueDate: string;
   expiryDate: string;
   status: QuotationStatus;
+  // Sectioned items (new)
+  sections?: QuotationSection[];
+  // Flat line items (legacy — kept for backward compat)
   lineItems: LineItem[];
   subtotal: number;
   totalDiscount: number;
