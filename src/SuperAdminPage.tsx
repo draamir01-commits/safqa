@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Shield, Users, Building2, TrendingUp, AlertCircle, CheckCircle, XCircle, RefreshCw, Search, LogOut } from "lucide-react";
+import { Shield, Users, Building2, TrendingUp, AlertCircle, CheckCircle, XCircle, RefreshCw, Search, LogOut, ArrowLeft } from "lucide-react";
 import { collection, getDocs, doc, updateDoc, query, orderBy } from "firebase/firestore";
 import { db } from "./firebase/config";
 import { useAuthStore } from "./stores/authStore";
@@ -126,6 +126,13 @@ export const SuperAdminPage: React.FC = () => {
         <div className="flex items-center gap-3">
           <button onClick={loadAllCompanies} className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors">
             <RefreshCw className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors text-sm font-semibold"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to App
           </button>
           <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700 transition-colors text-sm">
             <LogOut className="h-4 w-4" /> Sign Out
