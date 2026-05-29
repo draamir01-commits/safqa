@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Trash2, Pencil, TrendingUp, ArrowUpCircle, Filter } from "lucide-react";
+import { Plus, Trash2, Pencil, TrendingUp, ArrowUpCircle, Filter, Search, Printer, FileText, Image as ImageIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
@@ -12,6 +12,8 @@ import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
 import Modal from "../../components/ui/Modal";
 import { ExportMenu } from "../../components/ui/ExportMenu";
+import { PrintManager } from "../../components/ui/PrintManager";
+import { DocumentViewer } from "../../components/ui/DocumentViewer";
 import { DuplicateScanButton } from "../../components/ui/DuplicateScanner";
 import { AttachmentUploader } from "../../components/ui/AttachmentUploader";
 import { AIReceiptScanner } from "../../components/ui/AIReceiptScanner";
@@ -32,6 +34,9 @@ export const IncomePage: React.FC = () => {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [filterProject, setFilterProject] = React.useState("");
   const [filterMethod, setFilterMethod] = React.useState("");
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [showPrint, setShowPrint] = React.useState(false);
+  const [viewingDoc, setViewingDoc] = React.useState<{ url: string; fileName: string } | null>(null);
 
   // Form
   const [date, setDate] = React.useState(new Date().toISOString().split("T")[0]);
@@ -68,10 +73,61 @@ export const IncomePage: React.FC = () => {
     return { net: a, vat, total: a + vat };
   }, [amount, vatPercent, vatInclusive]);
 
-  const filtered = income.filter(i =>
-    (!filterProject || i.projectId === filterProject) &&
-    (!filterMethod || i.paymentMethod === filterMethod)
-  );
+  const filtered = income.filter(i => {
+    const matchProject = !filterProject || i.projectId === filterProject;
+    const matchMethod  = !filterMethod  || i.paymentMethod === filterMethod;
+    if (!matchProject || !matchMethod) return false;
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase();
+    return (
+      (i.description || "").toLowerCase().includes(q) ||
+      (i.descriptionAr || "").toLowerCase().includes(q) ||
+      (i.clientName || "").toLowerCase().includes(q) ||
+      (i.projectName || "").toLowerCase().includes(q) ||
+      (i.receiptNo || "").toLowerCase().includes(q) ||
+      String(i.totalAmount).includes(q) ||
+      (i.category || "").toLowerCase().includes(q) ||
+      (i.date || "").includes(q)
+    );
+  });
+
+  // Dynamic payment methods from real data
+  const dynamicMethods = Array.from(new Set(income.map(i => i.paymentMethod).filter(Boolean))).sort();
+
+  // Live duplicate count
+  const countDuplicates = () => {
+    const groups: Record<string, number> = {};
+    income.forEach(i => {
+      const key = `${Number(i.totalAmount).toFixed(2)}|${i.clientId || ""}|${i.date}`;
+      groups[key] = (groups[key] || 0) + 1;
+    });
+    return Object.values(groups).filter(c => c > 1).length;
+  };
+  const duplicateCount = countDuplicates();
+
+  // Grouped export by project
+  const getGroupedExportData = () => {
+    const groups: Record<string, typeof filtered> = {};
+    filtered.forEach(i => {
+      const key = i.projectName || (language === "ar" ? "بدون مشروع" : "No Project");
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(i);
+    });
+    const sections: any[] = [];
+    let grandNet = 0, grandVat = 0, grandTotal = 0;
+    Object.entries(groups).forEach(([projName, items]) => {
+      let projNet = 0, projVat = 0, projTotal = 0;
+      const rows: any[] = items.map(i => {
+        projNet += i.amount; projVat += i.vatAmount; projTotal += i.totalAmount;
+        return { Date: i.date, "Receipt No": i.receiptNo || "—", Description: i.description, "Payment Method": i.paymentMethod, "Net Amount": i.amount, "VAT": i.vatAmount, "Total": i.totalAmount };
+      });
+      rows.push({ Date: `SUBTOTAL: ${projName}`, "Receipt No": "", Description: "", "Payment Method": "", "Net Amount": projNet, "VAT": projVat, "Total": projTotal });
+      sections.push({ title: `${language === "ar" ? "المشروع:" : "Project:"} ${projName}`, data: rows });
+      grandNet += projNet; grandVat += projVat; grandTotal += projTotal;
+    });
+    sections.push({ title: language === "ar" ? "الإجمالي العام" : "Grand Total", data: [{ Date: "GRAND TOTAL", "Receipt No": "", Description: "", "Payment Method": "", "Net Amount": grandNet, "VAT": grandVat, "Total": grandTotal }] });
+    return sections;
+  };
 
   const totalRevenue = filtered.reduce((s, i) => s + i.amount, 0);
   const totalVat = filtered.reduce((s, i) => s + i.vatAmount, 0);
@@ -145,8 +201,22 @@ export const IncomePage: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "تسجيل وتتبع الإيرادات والمقبوضات" : "Record and track all income and receipts"}</p>
         </div>
         <div className="flex items-center gap-2">
-          <ExportMenu data={filtered} filename="income" headers={{ date: "Date", description: "Description", clientName: "Client", amount: "Net", vatAmount: "VAT", totalAmount: "Total", paymentMethod: "Method" }} />
-          <DuplicateScanButton data={income} config={{ collection: "income", labelEn: "Income", labelAr: "الإيرادات", keyFields: ["totalAmount","clientId","date"] }} />
+          <ExportMenu data={getGroupedExportData()} filename="income" />
+          <div className="relative">
+            <DuplicateScanButton data={income} config={{ collection: "income", labelEn: "Income", labelAr: "الإيرادات", keyFields: ["totalAmount","clientId","date"] }} />
+            {duplicateCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-bounce">
+                {duplicateCount}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "طباعة" : "Print"}
+          </button>
           <Button onClick={() => { resetForm(); setShowForm(true); }} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />{language === "ar" ? "تسجيل إيراد" : "Record Income"}
           </Button>
@@ -169,24 +239,36 @@ export const IncomePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-3">
-        <Filter className="h-4 w-4 text-slate-400 shrink-0" />
-        <select value={filterProject} onChange={e => setFilterProject(e.target.value)}
-          className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none">
-          <option value="">{language === "ar" ? "كل المشاريع" : "All Projects"}</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={filterMethod} onChange={e => setFilterMethod(e.target.value)}
-          className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none">
-          <option value="">{language === "ar" ? "كل طرق الدفع" : "All Payment Methods"}</option>
-          {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
-        {(filterProject || filterMethod) && (
-          <button onClick={() => { setFilterProject(""); setFilterMethod(""); }} className="text-xs text-red-500 hover:underline font-semibold">
-            {language === "ar" ? "مسح الفلاتر" : "Clear filters"}
-          </button>
-        )}
+      {/* Search + Filters */}
+      <div className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-white border border-slate-200 rounded-xl p-3">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder={language === "ar" ? "بحث في الإيرادات..." : "Search income..."}
+            className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-primary"
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter className="h-4 w-4 text-slate-400 shrink-0" />
+          <select value={filterProject} onChange={e => setFilterProject(e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none">
+            <option value="">{language === "ar" ? "كل المشاريع" : "All Projects"}</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select value={filterMethod} onChange={e => setFilterMethod(e.target.value)}
+            className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none">
+            <option value="">{language === "ar" ? "كل طرق الدفع" : "All Payment Methods"}</option>
+            {dynamicMethods.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          {(filterProject || filterMethod || searchTerm) && (
+            <button onClick={() => { setFilterProject(""); setFilterMethod(""); setSearchTerm(""); }} className="text-xs text-red-500 hover:underline font-semibold">
+              {language === "ar" ? "مسح" : "Clear"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -213,7 +295,15 @@ export const IncomePage: React.FC = () => {
                 <td className="px-4 py-3">
                   <p className="font-semibold text-slate-800 text-sm">{language === "ar" ? item.descriptionAr || item.description : item.description}</p>
                   <p className="text-xs text-slate-400">{item.category}</p>
-                  {item.attachments?.length > 0 && <p className="text-[10px] text-brand-primary">📎 {item.attachments.length}</p>}
+                  {item.attachments?.length > 0 && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setViewingDoc({ url: item.attachments[0], fileName: `income-${item.receiptNo || item.date}` }); }}
+                      className="flex items-center gap-1 text-[10px] text-brand-primary hover:text-blue-700 transition-colors"
+                    >
+                      {item.attachments[0]?.includes("pdf") ? <FileText className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
+                      {item.attachments.length} {language === "ar" ? "مرفق" : "attachment(s)"}
+                    </button>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   {item.clientName && <p className="text-xs font-medium text-slate-700">{item.clientName}</p>}
@@ -312,6 +402,21 @@ export const IncomePage: React.FC = () => {
           </div>
         </div>
       </Modal>
+      {/* Print Manager */}
+      <PrintManager
+        isOpen={showPrint}
+        onClose={() => setShowPrint(false)}
+        title={language === "ar" ? "سجل الإيرادات" : "Income Registry"}
+        itemCount={filtered.length}
+      />
+
+      {/* Document Viewer */}
+      <DocumentViewer
+        isOpen={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        url={viewingDoc?.url || null}
+        fileName={viewingDoc?.fileName}
+      />
     </div>
   );
 };
