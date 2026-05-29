@@ -3,7 +3,7 @@ import {
   Plus, Eye, FileText, CheckCircle, XCircle,
   ArrowRight, Trash2, Send, Printer, Search, History,
   Copy, Edit, ChevronDown, ChevronUp, Briefcase, MapPin,
-  Download, User, GripVertical, AlignLeft, X
+  Download, User, GripVertical, AlignLeft, X, UserCheck, Stamp as StampIcon, ImageIcon, FileText as FileTextIcon
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
@@ -17,6 +17,8 @@ import {
   listenCompanyCollection, addDocument, updateDocument,
   deleteDocument, getNextInvoiceNumber, saveInvoice
 } from "../../firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../../firebase/config";
 import { formatCurrency } from "../../utils/formatters";
 import {
   Quotation, QuotationStatus, QuotationRevisionSnapshot,
@@ -81,6 +83,49 @@ export const QuotationsPage: React.FC = () => {
   const [products, setProducts]       = React.useState<Product[]>([]);
   const [loading, setLoading]         = React.useState(false);
   const [showPrint, setShowPrint]     = React.useState(false);
+  const [showExportModal, setShowExportModal] = React.useState(false);
+  const [exportingQuotation, setExportingQuotation] = React.useState<Quotation | null>(null);
+  const [generatingPdf, setGeneratingPdf] = React.useState(false);
+
+  // Export branding options
+  const [expLetterhead, setExpLetterhead]     = React.useState(false);
+  const [expLHId, setExpLHId]                 = React.useState("primary");
+  const [expLogo, setExpLogo]                 = React.useState(true);
+  const [expStamp, setExpStamp]               = React.useState(false);
+  const [expSigId, setExpSigId]               = React.useState("");
+  const [expIncludeSig, setExpIncludeSig]     = React.useState(false);
+  const [expSignatories, setExpSignatories]   = React.useState<any[]>([]);
+  const [expLetterheads, setExpLetterheads]   = React.useState<any[]>([]);
+
+  // Load branding data when export modal opens
+  React.useEffect(() => {
+    if (!showExportModal || !currentCompany) return;
+    const q = query(collection(db, "companies", currentCompany.id, "signatories"), where("isActive", "==", true));
+    getDocs(q).then(snap => setExpSignatories(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const lhs: any[] = [{ id: "primary", name: language === "ar" ? "الترويسة الرئيسية" : "Primary Letterhead", url: "" }];
+    ((currentCompany as any).additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
+    setExpLetterheads(lhs);
+  }, [showExportModal, currentCompany]);
+
+  const loadImageAsBase64 = (url: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      if (url.startsWith("data:")) { resolve(url); return; }
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width; canvas.height = img.height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+
+  const openExportModal = (q: Quotation) => {
+    setExportingQuotation(q);
+    setShowExportModal(true);
+  };
   const [showForm, setShowForm]       = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
   const [selected, setSelected]       = React.useState<Quotation | null>(null);
@@ -309,17 +354,57 @@ export const QuotationsPage: React.FC = () => {
     await updateDocument(`companies/${currentCompany.id}/quotations`, q.id, { status, updatedAt: new Date() });
   };
 
-  // ── PDF export ───────────────────────────────────────────────────────────
-  const exportQuotationPDF = async (q: Quotation) => {
+  // ── PDF export with branding ─────────────────────────────────────────────
+  const exportQuotationPDF = async (q: Quotation, opts?: { letterhead: boolean; lhId: string; logo: boolean; stamp: boolean; sigId: string; includeSig: boolean; }) => {
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
     let y = 15;
-    doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 30, "F");
-    doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
-    doc.text(currentCompany?.name || "Company", 14, 13);
-    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(180);
-    doc.text([currentCompany?.vatNumber ? `VAT: ${currentCompany.vatNumber}` : "", currentCompany?.phone || "", currentCompany?.city || ""].filter(Boolean).join("   "), 14, 22);
-    y = 40;
+    const o = opts || { letterhead: false, lhId: "primary", logo: false, stamp: false, sigId: "", includeSig: false };
+
+    // ── Letterhead / header ───────────────────────────────────────────────
+    if (o.letterhead) {
+      const selLH = expLetterheads.find((l: any) => l.id === o.lhId);
+      if (selLH && selLH.url) {
+        try {
+          const b64 = await loadImageAsBase64(selLH.url);
+          doc.addImage(b64, "PNG", 0, 0, pw, 35);
+          y = 40;
+        } catch { /* fallback below */ }
+      }
+      if (y === 15) {
+        // Primary text letterhead
+        doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 30, "F");
+        if (o.logo && (currentCompany as any)?.logo) {
+          try { const lb = await loadImageAsBase64((currentCompany as any).logo); doc.addImage(lb, "PNG", 8, 4, 20, 20); } catch {}
+        }
+        doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
+        doc.text(currentCompany?.name || "Company", o.logo ? 32 : 14, 13);
+        doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(180);
+        doc.text([currentCompany?.vatNumber ? `VAT: ${currentCompany.vatNumber}` : "", currentCompany?.phone || "", currentCompany?.city || ""].filter(Boolean).join("   "), o.logo ? 32 : 14, 22);
+        y = 40;
+      }
+    } else {
+      // Simple header
+      if (o.logo && (currentCompany as any)?.logo) {
+        try {
+          const lb = await loadImageAsBase64((currentCompany as any).logo);
+          doc.addImage(lb, "PNG", 14, y - 5, 18, 18);
+          doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+          doc.text(currentCompany?.name || "Company", 36, y + 4);
+          y += 16;
+        } catch {
+          doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+          doc.text(currentCompany?.name || "Company", 14, y); y += 8;
+        }
+      } else {
+        doc.setFillColor(15, 23, 42); doc.rect(0, 0, pw, 30, "F");
+        doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
+        doc.text(currentCompany?.name || "Company", 14, 13);
+        doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(180);
+        doc.text([currentCompany?.vatNumber ? `VAT: ${currentCompany.vatNumber}` : "", currentCompany?.phone || "", currentCompany?.city || ""].filter(Boolean).join("   "), 14, 22);
+        y = 40;
+      }
+    }
     doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
     doc.text("QUOTATION", 14, y); y += 8;
     doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
@@ -388,7 +473,30 @@ export const QuotationsPage: React.FC = () => {
     });
     y = (doc as any).lastAutoTable.finalY + 10;
     if (q.notes) { doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.text("Notes:", 14, y); y+=4; doc.setFont("helvetica","normal"); doc.setTextColor(80); doc.text(q.notes, 14, y, { maxWidth: pw-28 }); y+=10; }
-    if (q.terms) { doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.text("Terms & Conditions:", 14, y); y+=4; doc.setFont("helvetica","normal"); doc.setTextColor(80); doc.text(q.terms, 14, y, { maxWidth: pw-28 }); }
+    if (q.terms) { doc.setFontSize(8); doc.setFont("helvetica","bold"); doc.setTextColor(15,23,42); doc.text("Terms & Conditions:", 14, y); y+=4; doc.setFont("helvetica","normal"); doc.setTextColor(80); doc.text(q.terms, 14, y, { maxWidth: pw-28 }); y += 14; }
+
+    // ── Signatory + Stamp ─────────────────────────────────────────────────
+    const selectedSig = o.sigId ? expSignatories.find((s: any) => s.id === o.sigId) : null;
+    if (selectedSig || (o.stamp && (currentCompany as any)?.stamp)) {
+      const ph2 = doc.internal.pageSize.getHeight();
+      if (y + 50 > ph2 - 20) { doc.addPage(); y = 20; }
+      doc.setDrawColor(200); doc.line(14, y, pw - 14, y); y += 8;
+      if (selectedSig) {
+        if (o.includeSig && selectedSig.signatureUrl) {
+          try { const sb = await loadImageAsBase64(selectedSig.signatureUrl); doc.addImage(sb, "PNG", 14, y, 50, 18); y += 20; } catch {}
+        }
+        doc.setDrawColor(150); doc.line(14, y + 2, 70, y + 2);
+        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+        doc.text(selectedSig.name, 14, y + 8);
+        doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+        doc.text(selectedSig.designation || "", 14, y + 13);
+        doc.setFontSize(7); doc.setTextColor(150);
+        doc.text(language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory", 14, y + 18);
+      }
+      if (o.stamp && (currentCompany as any)?.stamp) {
+        try { const stb = await loadImageAsBase64((currentCompany as any).stamp); doc.addImage(stb, "PNG", pw - 55, y - 5, 40, 40); } catch {}
+      }
+    }
     const ph = doc.internal.pageSize.getHeight();
     const total = (doc as any).internal.getNumberOfPages();
     for (let i = 1; i <= total; i++) { doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150); doc.text(`Page ${i} of ${total}`, pw-14, ph-8, { align: "right" }); doc.text("Safqa — ZATCA Compliant ERP", 14, ph-8); }
@@ -498,7 +606,7 @@ export const QuotationsPage: React.FC = () => {
                   <button onClick={()=>{setSelected(q);setShowPreview(true);}} className="p-1.5 text-slate-400 hover:text-brand-primary hover:bg-blue-50 rounded-lg transition-colors" title="View"><Eye className="h-4 w-4"/></button>
                   <button onClick={()=>openEdit(q)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Edit"><Edit className="h-4 w-4"/></button>
                   <button onClick={()=>handleRevise(q)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="Revise"><Copy className="h-4 w-4"/></button>
-                  <button onClick={()=>exportQuotationPDF(q)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Export PDF"><Download className="h-4 w-4"/></button>
+                  <button onClick={()=>openExportModal(q)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Export PDF"><Download className="h-4 w-4"/></button>
                   {q.status!=="converted"&&q.status!=="rejected"&&(
                     <button onClick={()=>handleConvertToInvoice(q)} className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" title="Convert to Invoice"><ArrowRight className="h-4 w-4"/></button>
                   )}
@@ -809,7 +917,7 @@ export const QuotationsPage: React.FC = () => {
             {selected.notes&&<div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700"><p className="font-semibold mb-1">{language==="ar"?"ملاحظات":"Notes"}</p><p>{selected.notes}</p></div>}
             {selected.terms&&<div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600"><p className="font-semibold mb-1">{language==="ar"?"الشروط":"Terms"}</p><p className="whitespace-pre-wrap">{selected.terms}</p></div>}
             <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={()=>exportQuotationPDF(selected)} className="flex items-center gap-2">
+              <Button variant="secondary" onClick={()=>openExportModal(selected)} className="flex items-center gap-2">
                 <Download className="h-4 w-4"/>{language==="ar"?"تصدير PDF":"Export PDF"}
               </Button>
               {selected.status!=="converted"&&selected.status!=="rejected"&&(
@@ -821,6 +929,127 @@ export const QuotationsPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* ── Export Options Modal ── */}
+      {showExportModal && exportingQuotation && (
+        <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowExportModal(false)}>
+          <div className="absolute inset-0 bg-slate-900/30" />
+          <div className="relative w-80 bg-white h-full shadow-2xl flex flex-col overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-bold text-slate-800">{language === "ar" ? "خيارات تصدير عرض السعر" : "Export Quotation PDF"}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{exportingQuotation.quotationNumber}</p>
+              </div>
+              <button onClick={() => setShowExportModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg"><X className="h-5 w-5 text-slate-400" /></button>
+            </div>
+
+            <div className="flex-1 p-5 space-y-5 overflow-y-auto">
+
+              {/* Letterhead */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">{language === "ar" ? "الترويسة" : "Letterhead"}</p>
+                <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-brand-primary transition-colors">
+                  <div className="flex items-center gap-2">
+                    <FileTextIcon className="h-4 w-4 text-slate-400" />
+                    <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "تضمين ترويسة" : "Include Letterhead"}</span>
+                  </div>
+                  <input type="checkbox" checked={expLetterhead} onChange={e => setExpLetterhead(e.target.checked)} className="rounded border-slate-300 text-brand-primary" />
+                </label>
+                {expLetterhead && expLetterheads.length > 1 && (
+                  <div className="mt-2 space-y-1">
+                    {expLetterheads.map(lh => (
+                      <label key={lh.id} className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${expLHId === lh.id ? "border-brand-primary bg-blue-50" : "border-slate-100"}`}>
+                        <input type="radio" checked={expLHId === lh.id} onChange={() => setExpLHId(lh.id)} className="text-brand-primary" />
+                        {lh.url ? <img src={lh.url} alt={lh.name} className="h-7 object-contain rounded border border-slate-200 bg-white" /> : <div className="h-7 w-10 bg-slate-100 rounded border flex items-center justify-center"><ImageIcon className="h-3 w-3 text-slate-300" /></div>}
+                        <span className="text-xs font-medium text-slate-700">{lh.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Logo & Stamp */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">{language === "ar" ? "الشعار والختم" : "Logo & Stamp"}</p>
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-brand-primary transition-colors">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4 text-slate-400" />
+                      <div>
+                        <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "تضمين الشعار" : "Include Logo"}</span>
+                        {!(currentCompany as any)?.logo && <p className="text-[10px] text-slate-400">{language === "ar" ? "لم يُرفع شعار" : "No logo uploaded"}</p>}
+                      </div>
+                    </div>
+                    <input type="checkbox" checked={expLogo} onChange={e => setExpLogo(e.target.checked)} disabled={!(currentCompany as any)?.logo} className="rounded border-slate-300 text-brand-primary" />
+                  </label>
+                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-brand-primary transition-colors">
+                    <div className="flex items-center gap-2">
+                      <StampIcon className="h-4 w-4 text-slate-400" />
+                      <div>
+                        <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "تضمين الختم" : "Include Stamp"}</span>
+                        {!(currentCompany as any)?.stamp && <p className="text-[10px] text-slate-400">{language === "ar" ? "لم يُرفع ختم" : "No stamp uploaded"}</p>}
+                      </div>
+                    </div>
+                    <input type="checkbox" checked={expStamp} onChange={e => setExpStamp(e.target.checked)} disabled={!(currentCompany as any)?.stamp} className="rounded border-slate-300 text-brand-primary" />
+                  </label>
+                </div>
+              </div>
+
+              {/* Signatory */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">{language === "ar" ? "التوقيع المفوض" : "Authorized Signatory"}</p>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                  <select value={expSigId} onChange={e => setExpSigId(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white">
+                    <option value="">{language === "ar" ? "بدون توقيع" : "None"}</option>
+                    {expSignatories.map((s: any) => <option key={s.id} value={s.id}>{s.name} — {s.designation}</option>)}
+                  </select>
+                  {expSigId && expSignatories.find((s: any) => s.id === expSigId)?.signatureUrl && (
+                    <label className="flex items-center justify-between cursor-pointer mt-1">
+                      <span className="text-xs text-slate-600">{language === "ar" ? "تضمين صورة التوقيع" : "Include signature image"}</span>
+                      <input type="checkbox" checked={expIncludeSig} onChange={e => setExpIncludeSig(e.target.checked)} className="rounded border-slate-300 text-brand-primary" />
+                    </label>
+                  )}
+                  {expSignatories.length === 0 && <p className="text-[10px] text-slate-400">{language === "ar" ? "أضف مفوضين من الإعدادات" : "Add signatories in Settings"}</p>}
+                </div>
+              </div>
+
+              {/* Preview strip */}
+              {(expLetterhead || expLogo || expStamp || expSigId) && (
+                <div className="bg-slate-900 rounded-xl p-3 text-[10px] text-slate-400 space-y-1">
+                  <p className="font-bold text-white text-xs mb-2">{language === "ar" ? "سيحتوي الملف على:" : "PDF will include:"}</p>
+                  {expLetterhead && <p>✓ {expLetterheads.find(l => l.id === expLHId)?.name || "Letterhead"}</p>}
+                  {expLogo && (currentCompany as any)?.logo && <p>✓ {language === "ar" ? "شعار الشركة" : "Company logo"}</p>}
+                  {expStamp && (currentCompany as any)?.stamp && <p>✓ {language === "ar" ? "الختم الرسمي" : "Company stamp"}</p>}
+                  {expSigId && <p>✓ {expSignatories.find((s: any) => s.id === expSigId)?.name}</p>}
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-slate-100 shrink-0">
+              <button
+                onClick={async () => {
+                  if (!exportingQuotation) return;
+                  setGeneratingPdf(true);
+                  try {
+                    await exportQuotationPDF(exportingQuotation, {
+                      letterhead: expLetterhead, lhId: expLHId,
+                      logo: expLogo, stamp: expStamp,
+                      sigId: expSigId, includeSig: expIncludeSig,
+                    });
+                    setShowExportModal(false);
+                  } finally { setGeneratingPdf(false); }
+                }}
+                disabled={generatingPdf}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-brand-primary text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                {generatingPdf ? (language === "ar" ? "جاري الإنشاء..." : "Generating...") : (language === "ar" ? "تحميل PDF" : "Download PDF")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <PrintManager isOpen={showPrint} onClose={()=>setShowPrint(false)}
         title={language==="ar"?"سجل عروض الأسعار":"Quotations Register"}
