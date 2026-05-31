@@ -96,7 +96,7 @@ export const QuotationsPage: React.FC = () => {
   const [generatingPdf, setGeneratingPdf] = React.useState(false);
 
   // Export branding options
-  const [expLetterhead, setExpLetterhead]     = React.useState(false);
+  const [expLHMode, setExpLHMode] = React.useState<"none"|"header"|"full">("none");
   const [expLHId, setExpLHId]                 = React.useState("primary");
   const [expLogo, setExpLogo]                 = React.useState(true);
   const [expStamp, setExpStamp]               = React.useState(false);
@@ -123,7 +123,11 @@ export const QuotationsPage: React.FC = () => {
         setExpIncludeSig(!!(sigs[0] as any).signatureUrl);
       }
     });
-    const lhs: any[] = [{ id: "primary", name: language === "ar" ? "الترويسة الرئيسية" : "Primary Letterhead", url: "" }];
+    const lhs: any[] = [{
+      id: "primary",
+      name: language === "ar" ? "الترويسة الرئيسية" : "Primary Letterhead",
+      url: (currentCompany as any).fullLetterhead || "",
+    }];
     ((currentCompany as any).additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
     setExpLetterheads(lhs);
   }, [showExportModal, currentCompany]);
@@ -217,10 +221,16 @@ export const QuotationsPage: React.FC = () => {
     const co = currentCompany as any;
 
     // ── Smart defaults: read company profile preferences ──
-    // Default letterhead ON if company has a letterhead image uploaded
-    const hasLetterhead = !!(co?.letterhead || co?.letterheadUrl ||
-      (co?.additionalLetterheads && co.additionalLetterheads.length > 0));
-    setExpLetterhead(co?.defaultShowLetterhead ?? hasLetterhead);
+    // Smart default: auto-select mode based on what company has uploaded
+    if (co?.fullLetterhead) {
+      setExpLHMode("full");
+    } else if (co?.additionalLetterheads?.length || co?.letterhead || co?.letterheadUrl) {
+      setExpLHMode("header");
+    } else if (co?.defaultShowLetterhead) {
+      setExpLHMode("header");
+    } else {
+      setExpLHMode("none");
+    }
 
     // Default logo ON if company has a logo
     setExpLogo(co?.defaultShowLogo ?? !!(co?.logo));
@@ -555,13 +565,21 @@ export const QuotationsPage: React.FC = () => {
   };
 
   // ── PDF export — professional layout matching reference ─────────────────
-  const exportQuotationPDF = async (q: Quotation, opts?: { letterhead: boolean; lhId: string; logo: boolean; stamp: boolean; sigId: string; includeSig: boolean; }) => {
+  const exportQuotationPDF = async (q: Quotation, opts?: { letterhead: boolean; lhId: string; lhMode?: string; logo: boolean; stamp: boolean; sigId: string; includeSig: boolean; }) => {
     const co = currentCompany as any;
     const qNum = q.quotationNumber || "Quotation";
-    const o = opts || { letterhead: false, lhId: "primary", logo: false, stamp: false, sigId: "", includeSig: false };
+    const o = opts || { letterhead: false, lhId: "primary", lhMode: "none", logo: false, stamp: false, sigId: "", includeSig: false };
+    const lhMode = (o as any).lhMode || (o.letterhead ? "header" : "none");
     const selectedSig = o.sigId ? expSignatories.find((s: any) => s.id === o.sigId) : null;
 
     // Company header lines
+    // Resolve letterhead image for this export
+    let lhImageUrl = "";
+    if (lhMode !== "none") {
+      const selLH = expLetterheads.find((l: any) => l.id === o.lhId);
+      if (selLH?.url) lhImageUrl = selLH.url;
+    }
+
     const leftLines = [co?.address||"", co?.city ? co.city+", Kingdom of Saudi Arabia":"",
       co?.email||"", co?.phone||"",
       co?.vatNumber ? "VAT number "+co.vatNumber:"",
@@ -674,7 +692,19 @@ table{border-collapse:collapse;width:100%}
 </head>
 <body translate="no">
 
-<!-- HEADER -->
+${lhMode === "full" && lhImageUrl ? `
+<!-- FULL PAGE LETTERHEAD -->
+<div style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none">
+  <img src="${lhImageUrl}" style="width:100%;height:100%;object-fit:cover" alt="letterhead"/>
+</div>
+<div style="height:48mm"></div>
+` : lhMode === "header" && lhImageUrl ? `
+<!-- HEADER BANNER -->
+<div style="margin:-12mm -12mm 10px -12mm">
+  <img src="${lhImageUrl}" style="width:calc(100% + 24mm);max-height:50mm;object-fit:cover;display:block" alt="letterhead header"/>
+</div>
+` : `
+<!-- HEADER TEXT -->
 <table style="width:100%;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin-bottom:10px">
   <tr>
     <td style="width:38%;vertical-align:top">
@@ -690,6 +720,7 @@ table{border-collapse:collapse;width:100%}
     </td>
   </tr>
 </table>
+`}
 
 <!-- TITLE -->
 <div style="text-align:center;margin:8px 0 4px">
@@ -784,6 +815,14 @@ ${sigHTML}
   <span>Page 1 of 1</span>
   <span>${qNum}</span>
 </div>
+${(() => {
+  const footerUrl = (co?.footerAsset || co?.letterheadFooter) as string|undefined;
+  return lhMode === "header" && footerUrl ? `
+<!-- FOOTER BANNER -->
+<div style="margin:10px -12mm -12mm -12mm">
+  <img src="${footerUrl}" style="width:calc(100% + 24mm);max-height:25mm;object-fit:cover;display:block" alt="letterhead footer"/>
+</div>` : "";
+})()}
 
 <script>
 document.title="${qNum}";
@@ -1430,18 +1469,39 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
 
             <div className="flex-1 p-5 space-y-5 overflow-y-auto">
 
-              {/* Letterhead */}
+              {/* Letterhead — 3 mode selector */}
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">{language === "ar" ? "الترويسة" : "Letterhead"}</p>
-                <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-brand-primary transition-colors">
-                  <div className="flex items-center gap-2">
-                    <FileTextIcon className="h-4 w-4 text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "تضمين ترويسة" : "Include Letterhead"}</span>
-                  </div>
-                  <input type="checkbox" checked={expLetterhead} onChange={e => setExpLetterhead(e.target.checked)} className="rounded border-slate-300 text-brand-primary" />
-                </label>
-                {expLetterhead && expLetterheads.length > 1 && (
-                  <div className="mt-2 space-y-1">
+                <div className="space-y-2">
+                  {([
+                    { mode: "none",   iconText: "⊘", labelEn: "No Letterhead",       labelAr: "بدون ترويسة",        descEn: "Plain header text only",              descAr: "نص عادي فقط" },
+                    { mode: "header", iconText: "▬", labelEn: "Header + Footer",      labelAr: "رأس وتذييل",         descEn: "Banner image top & bottom",           descAr: "صورة عرضية أعلى وأسفل" },
+                    { mode: "full",   iconText: "▮", labelEn: "Full Page Letterhead",  labelAr: "ترويسة صفحة كاملة", descEn: "Full A4 background on every page",    descAr: "خلفية A4 كاملة في كل صفحة" },
+                  ] as const).map(opt => (
+                    <label key={opt.mode} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${expLHMode === opt.mode ? "border-brand-primary bg-blue-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"}`}>
+                      <input type="radio" name="expLHMode" checked={expLHMode === opt.mode}
+                        onChange={() => setExpLHMode(opt.mode)} className="mt-0.5 text-brand-primary" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm">{opt.iconText}</span>
+                          <span className="text-xs font-semibold text-slate-700">{language === "ar" ? opt.labelAr : opt.labelEn}</span>
+                          {opt.mode === "full" && !(currentCompany as any)?.fullLetterhead && (
+                            <span className="text-[9px] text-amber-500 font-semibold">{language === "ar" ? "لم يُرفع" : "not uploaded"}</span>
+                          )}
+                          {opt.mode === "full" && (currentCompany as any)?.fullLetterhead && (
+                            <span className="text-[9px] text-emerald-500 font-semibold">✓ A4</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{language === "ar" ? opt.descAr : opt.descEn}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {/* Source picker when not "none" and multiple sources available */}
+                {expLHMode !== "none" && expLetterheads.length > 1 && (
+                  <div className="mt-3 space-y-1">
+                    <p className="text-[10px] text-slate-500 font-semibold pl-1">{language === "ar" ? "اختر الترويسة:" : "Choose source:"}</p>
                     {expLetterheads.map(lh => (
                       <label key={lh.id} className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${expLHId === lh.id ? "border-brand-primary bg-blue-50" : "border-slate-100"}`}>
                         <input type="radio" checked={expLHId === lh.id} onChange={() => setExpLHId(lh.id)} className="text-brand-primary" />
@@ -1500,10 +1560,11 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
               </div>
 
               {/* Preview strip */}
-              {(expLetterhead || expLogo || expStamp || expSigId) && (
+              {(expLHMode !== "none" || expLogo || expStamp || expSigId) && (
                 <div className="bg-slate-900 rounded-xl p-3 text-[10px] text-slate-400 space-y-1">
                   <p className="font-bold text-white text-xs mb-2">{language === "ar" ? "سيحتوي الملف على:" : "PDF will include:"}</p>
-                  {expLetterhead && <p>✓ {expLetterheads.find(l => l.id === expLHId)?.name || "Letterhead"}</p>}
+                  {expLHMode === "full"   && <p>✓ {language === "ar" ? "ترويسة صفحة كاملة" : "Full page letterhead"} — {expLetterheads.find(l => l.id === expLHId)?.name || "Primary"}</p>}
+                  {expLHMode === "header" && <p>✓ {language === "ar" ? "رأس وتذييل" : "Header + footer"} — {expLetterheads.find(l => l.id === expLHId)?.name || "Primary"}</p>}
                   {expLogo && (currentCompany as any)?.logo && <p>✓ {language === "ar" ? "شعار الشركة" : "Company logo"}</p>}
                   {expStamp && (currentCompany as any)?.stamp && <p>✓ {language === "ar" ? "الختم الرسمي" : "Company stamp"}</p>}
                   {expSigId && <p>✓ {expSignatories.find((s: any) => s.id === expSigId)?.name}</p>}
@@ -1527,7 +1588,7 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
                   setShowExportModal(false);
                   try {
                     const html = await exportQuotationPDF(exportingQuotation, {
-                      letterhead: expLetterhead, lhId: expLHId,
+                      letterhead: expLHMode !== "none", lhId: expLHId, lhMode: expLHMode,
                       logo: expLogo, stamp: expStamp,
                       sigId: expSigId, includeSig: expIncludeSig,
                     });
