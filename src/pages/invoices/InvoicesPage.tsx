@@ -119,246 +119,280 @@ export const InvoicesPage: React.FC = () => {
       img.src = url;
     });
 
-  // ── Professional ZATCA Invoice PDF (HTML-based for Arabic support) ────────
+  // ── Professional ZATCA Invoice PDF — TechBridge layout ─────────────────
   const exportInvoicePDF = async (inv: Invoice, qrUrl: string) => {
     const co = currentCompany as any;
-    const dir = "ltr";
-
-    const row = (labelEN: string, valueEN: string, labelAR: string, valueAR: string) =>
-      `<tr>
-        <td class="label-en">${labelEN}</td>
-        <td class="value-en">${valueEN || ""}</td>
-        <td class="label-ar">${labelAR}</td>
-        <td class="value-ar">${valueAR || ""}</td>
-      </tr>`;
+    const invNum = inv.invoiceNumber || "Invoice";
 
     const titleEN = inv.type === "simplified" ? "Simplified Tax Invoice" : "Tax Invoice";
     const titleAR = inv.type === "simplified" ? "فاتورة ضريبية مبسطة" : "فاتورة ضريبية";
 
-    const lineRows = (inv.lineItems || []).map((l: any, i: number) => `
-      <tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td>${l.name || ""}<br/><span class="ar">${l.nameAr || ""}</span></td>
-        <td style="text-align:center">${l.qty}<br/>${l.unit || "PCE"}</td>
-        <td style="text-align:right">${(l.unitPrice || 0).toFixed(2)}</td>
-        <td style="text-align:right">${((l.lineTotal || 0) - (l.vatAmount || 0)).toFixed(2)}</td>
-        <td style="text-align:right">${(l.vatAmount || 0).toFixed(2)}<br/>${l.vatRate || 15}%</td>
-        <td style="text-align:right;font-weight:700">${(l.lineTotal || 0).toFixed(2)}</td>
-      </tr>`).join("");
+    // Build info grid rows — 4 columns: EN label | EN value | AR label | AR value
+    const infoRow = (labelEN: string, valEN: string, labelAR: string, valAR: string) =>
+      valEN || valAR ? `<tr>
+        <td class="info-label-en">${labelEN}</td>
+        <td class="info-val-en">${valEN || ""}</td>
+        <td class="info-label-ar">${labelAR}</td>
+        <td class="info-val-ar">${valAR || ""}</td>
+      </tr>` : "";
+
+    // Build line items rows
+    const lineRows = (inv.lineItems || []).map((l: any, i: number) => {
+      const net = (l.lineTotal || 0) - (l.vatAmount || 0);
+      return `<tr>
+        <td class="center">${i + 1}</td>
+        <td class="desc">${l.name || ""}${l.nameAr ? `<br/><span class="ar-sm">${l.nameAr}</span>` : ""}</td>
+        <td class="center">${l.qty || 1}<br/><span class="unit">${l.unit || "PCE"}</span></td>
+        <td class="num">${(l.unitPrice || 0).toFixed(2)}</td>
+        <td class="num">${net.toFixed(2)}</td>
+        <td class="num">${(l.vatAmount || 0).toFixed(2)}<br/><span class="unit">${l.vatRate || 15}%</span></td>
+        <td class="num bold">${(l.lineTotal || 0).toFixed(2)}</td>
+      </tr>`;
+    }).join("");
+
+    // Company info lines
+    const companyLeftLines = [
+      co?.address || "",
+      co?.city ? `${co.city}, Kingdom of Saudi Arabia` : "",
+      co?.email || "",
+      co?.phone || "",
+      co?.vatNumber ? `VAT number ${co.vatNumber}` : "",
+      co?.crNumber ? `CR Number ${co.crNumber}` : "",
+    ].filter(Boolean).map(l => `<div>${l}</div>`).join("");
+
+    const companyRightLines = [
+      co?.addressAr || (co?.address || ""),
+      co?.vatNumber ? `رقم التسجيل الضريبي ${co.vatNumber}` : "",
+      co?.crNumber ? `رقم السجل التجاري ${co.crNumber}` : "",
+    ].filter(Boolean).map(l => `<div class="ar">${l}</div>`).join("");
+
+    const logoHtml = co?.logo
+      ? `<img src="${co.logo}" alt="logo" style="max-height:60px;max-width:120px;object-fit:contain;"/>`
+      : `<div style="width:60px;height:60px;background:#1d4ed8;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22pt;font-weight:700;">${(co?.nameAr || co?.name || "S")[0]}</div>`;
 
     const html = `<!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <title>${inv.invoiceNumber}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Inter','Cairo',Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff;padding:12mm;}
-    .ar{font-family:'Cairo',Arial,sans-serif;direction:rtl;unicode-bidi:bidi-override;}
+<meta charset="UTF-8"/>
+<title>${invNum}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Inter','Cairo',Arial,sans-serif;font-size:9pt;color:#1a1a1a;background:#fff;padding:14mm 12mm;}
+  .ar{font-family:'Cairo',Arial,sans-serif;direction:rtl;unicode-bidi:embed;}
+  .ar-sm{font-family:'Cairo',Arial,sans-serif;font-size:7.5pt;color:#555;direction:rtl;display:block;}
+  .unit{font-size:7pt;color:#666;}
 
-    /* Header */
-    .header{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;padding-bottom:8px;border-bottom:1.5px solid #cbd5e1;margin-bottom:8px;}
-    .header-left{font-size:8pt;line-height:1.6;}
-    .header-left .company-name{font-size:11pt;font-weight:700;margin-bottom:3px;}
-    .header-right{font-size:8pt;line-height:1.6;text-align:right;direction:rtl;}
-    .header-right .company-name-ar{font-family:'Cairo',Arial,sans-serif;font-size:11pt;font-weight:700;margin-bottom:3px;}
-    .logo-wrap{display:flex;align-items:center;justify-content:center;}
-    .logo-wrap img{max-height:55px;max-width:100px;object-fit:contain;}
-    .logo-placeholder{width:55px;height:55px;background:#1d4ed8;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18pt;font-weight:700;}
+  /* ── HEADER ── */
+  .header{display:grid;grid-template-columns:1fr 100px 1fr;gap:10px;align-items:start;padding-bottom:10px;border-bottom:2px solid #e2e8f0;margin-bottom:10px;}
+  .hdr-left .co-name{font-size:11pt;font-weight:700;margin-bottom:4px;}
+  .hdr-left div{font-size:7.5pt;line-height:1.7;color:#444;}
+  .hdr-center{display:flex;align-items:center;justify-content:center;}
+  .hdr-right{text-align:right;}
+  .hdr-right .co-name-ar{font-family:'Cairo',Arial,sans-serif;font-size:11pt;font-weight:700;margin-bottom:4px;direction:rtl;}
+  .hdr-right div{font-size:7.5pt;line-height:1.7;color:#444;}
 
-    /* Title */
-    .title-row{text-align:center;font-size:18pt;font-weight:800;margin:6px 0;letter-spacing:1px;}
-    .title-row .ar{font-size:16pt;}
-    .divider{border:none;border-top:1.5px solid #cbd5e1;margin:6px 0;}
+  /* ── TITLE ── */
+  .title-row{display:flex;align-items:center;justify-content:center;gap:24px;margin:8px 0;padding:6px 0;}
+  .title-en{font-size:17pt;font-weight:800;color:#1a1a1a;}
+  .title-ar{font-family:'Cairo',Arial,sans-serif;font-size:17pt;font-weight:800;color:#1a1a1a;direction:rtl;}
+  .title-divider{border:none;border-top:2px solid #e2e8f0;margin:0 0 8px;}
 
-    /* Info grid */
-    .info-table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8.5pt;}
-    .info-table td{border:0.5px solid #cbd5e1;padding:4px 6px;vertical-align:middle;}
-    .info-table .label-en{font-weight:700;width:90px;color:#374151;}
-    .info-table .value-en{width:35%;color:#1e293b;}
-    .info-table .label-ar{font-family:'Cairo',Arial,sans-serif;font-weight:700;width:90px;color:#374151;text-align:right;direction:rtl;}
-    .info-table .value-ar{font-family:'Cairo',Arial,sans-serif;text-align:right;direction:rtl;color:#1e293b;}
+  /* ── INFO TABLE ── */
+  .info-table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:8.5pt;}
+  .info-table tr{border:0.5px solid #c8cdd5;}
+  .info-label-en{font-weight:700;padding:5px 8px;width:100px;background:#f8fafc;color:#333;border-right:0.5px solid #c8cdd5;}
+  .info-val-en{padding:5px 8px;color:#1a1a1a;border-right:1px solid #c8cdd5;min-width:120px;}
+  .info-label-ar{font-family:'Cairo',Arial,sans-serif;font-weight:700;padding:5px 8px;width:120px;background:#f8fafc;color:#333;text-align:right;direction:rtl;border-right:0.5px solid #c8cdd5;}
+  .info-val-ar{font-family:'Cairo',Arial,sans-serif;padding:5px 8px;color:#1a1a1a;text-align:right;direction:rtl;min-width:120px;}
 
-    /* Items table */
-    .items-table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8.5pt;}
-    .items-table th{background:#f1f5f9;border:0.5px solid #cbd5e1;padding:5px 6px;font-weight:700;text-align:center;vertical-align:middle;line-height:1.4;}
-    .items-table th .ar{font-size:7.5pt;display:block;margin-top:1px;}
-    .items-table td{border:0.5px solid #e2e8f0;padding:5px 6px;vertical-align:middle;}
-    .items-table tr:nth-child(even) td{background:#f8fafc;}
+  /* ── ITEMS TABLE ── */
+  .items-wrap{margin-bottom:12px;}
+  .items-table{width:100%;border-collapse:collapse;font-size:8.5pt;}
+  .items-table thead tr{background:#2d3748;color:#fff;}
+  .items-table th{padding:6px 7px;font-weight:700;text-align:center;border:0.5px solid #4a5568;font-size:8pt;line-height:1.4;}
+  .items-table th .ar-hd{font-family:'Cairo',Arial,sans-serif;font-size:7.5pt;display:block;margin-top:1px;font-weight:600;color:#e2e8f0;}
+  .items-table td{padding:6px 7px;border:0.5px solid #cbd5e0;vertical-align:middle;}
+  .items-table tr:nth-child(even) td{background:#f7fafc;}
+  .center{text-align:center;}
+  .num{text-align:right;font-family:'Inter',monospace;}
+  .desc{text-align:left;}
+  .bold{font-weight:700;}
 
-    /* Bottom section */
-    .bottom-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;margin-top:10px;}
-    .qr-block{display:flex;flex-direction:column;gap:4px;}
-    .qr-block img{width:90px;height:90px;border:0.5px solid #e2e8f0;}
-    .qr-note{font-size:6.5pt;color:#64748b;max-width:160px;line-height:1.4;}
-    .qr-note .ar{font-size:6.5pt;display:block;margin-top:2px;}
+  /* ── BOTTOM SECTION ── */
+  .bottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-bottom:14px;}
+  .qr-block img{width:88px;height:88px;border:0.5px solid #dde;}
+  .qr-note{font-size:6.5pt;color:#555;margin-top:5px;max-width:180px;line-height:1.5;}
+  .qr-note .ar{font-size:6.5pt;display:block;margin-top:3px;}
 
-    /* Totals */
-    .totals-table{width:100%;border-collapse:collapse;font-size:8.5pt;margin-left:auto;}
-    .totals-table td{border:0.5px solid #cbd5e1;padding:5px 8px;}
-    .totals-table .tot-label{font-weight:600;}
-    .totals-table .tot-label .ar{font-family:'Cairo',Arial,sans-serif;font-size:7.5pt;display:block;margin-top:1px;direction:rtl;}
-    .totals-table .tot-val{text-align:right;font-weight:600;}
-    .totals-table .grand td{background:#1e293b;color:#fff;font-weight:700;}
+  /* ── TOTALS ── */
+  .totals-table{width:100%;border-collapse:collapse;font-size:8.5pt;border:0.5px solid #c8cdd5;}
+  .totals-table td{padding:6px 10px;border:0.5px solid #c8cdd5;}
+  .tot-lbl{font-weight:600;}
+  .tot-lbl .ar{font-family:'Cairo',Arial,sans-serif;font-size:7.5pt;display:block;direction:rtl;color:#555;}
+  .tot-val{text-align:right;font-weight:600;white-space:nowrap;font-family:'Inter',monospace;}
+  .grand-row td{background:#1e2d3d;color:#fff;font-weight:700;}
+  .grand-row .tot-lbl .ar{color:#ccc;}
 
-    /* Footer */
-    .footer-section{margin-top:14px;padding-top:8px;border-top:1px solid #cbd5e1;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-    .sig-block{display:flex;flex-direction:column;gap:4px;}
-    .sig-line{border-bottom:1px solid #64748b;width:160px;margin-top:30px;margin-bottom:4px;}
-    .sig-name{font-weight:700;font-size:9pt;}
-    .sig-title{font-size:8pt;color:#64748b;}
-    .sig-label{font-size:7.5pt;color:#94a3b8;}
-    .sig-label .ar{font-family:'Cairo',Arial,sans-serif;}
-    .stamp-block{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
-    .stamp-block img{max-width:90px;max-height:90px;object-fit:contain;}
-    .stamp-label{font-size:7.5pt;color:#94a3b8;text-align:right;}
-    .stamp-label .ar{font-family:'Cairo',Arial,sans-serif;}
+  /* ── FOOTER ── */
+  .footer-divider{border:none;border-top:1.5px solid #e2e8f0;margin:10px 0 8px;}
+  .footer{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+  .sig-label{font-size:7.5pt;color:#666;margin-bottom:6px;}
+  .sig-img{height:45px;max-width:100px;object-fit:contain;margin-bottom:4px;}
+  .sig-line{border-bottom:1px solid #555;width:170px;margin:24px 0 6px;}
+  .sig-name{font-size:9.5pt;font-weight:700;color:#1a1a1a;}
+  .sig-title{font-size:8pt;color:#555;margin-top:2px;}
+  .sig-role{font-size:7.5pt;color:#888;margin-top:3px;}
+  .sig-role .ar{font-family:'Cairo',Arial,sans-serif;font-size:7pt;}
+  .stamp-block{display:flex;flex-direction:column;align-items:flex-end;}
+  .stamp-block img{max-width:85px;max-height:85px;object-fit:contain;}
+  .stamp-label{font-size:7.5pt;color:#888;text-align:right;margin-top:4px;}
+  .stamp-label .ar{font-family:'Cairo',Arial,sans-serif;font-size:7pt;}
 
-    /* Page footer */
-    .page-footer{margin-top:12px;padding-top:6px;border-top:0.5px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8;}
-    .page-footer .ar{font-family:'Cairo',Arial,sans-serif;}
+  /* ── PAGE FOOTER ── */
+  .page-footer{margin-top:12px;padding-top:6px;border-top:0.5px solid #e8ecf0;display:flex;justify-content:space-between;align-items:center;font-size:7pt;color:#888;}
+  .page-footer .ar{font-family:'Cairo',Arial,sans-serif;}
 
-    @media print{
-      body{padding:8mm;}
-      @page{size:A4;margin:8mm;}
-      .no-print{display:none!important;}
-    }
-  </style>
+  @media print{
+    body{padding:8mm 7mm;}
+    @page{size:A4 portrait;margin:0;}
+    .no-print{display:none!important;}
+  }
+</style>
 </head>
 <body>
 
-  <!-- HEADER -->
-  <div class="header">
-    <div class="header-left">
-      <div class="company-name">${co?.name || ""}</div>
-      ${[co?.address, co?.city ? co.city + ", Kingdom of Saudi Arabia" : "", co?.email, co?.phone, co?.vatNumber ? "VAT number " + co.vatNumber : "", co?.crNumber ? "CR Number " + co.crNumber : ""].filter(Boolean).map(l => `<div>${l}</div>`).join("")}
-    </div>
-    <div class="logo-wrap">
-      ${co?.logo ? `<img src="${co.logo}" alt="logo"/>` : `<div class="logo-placeholder">${(co?.nameAr || co?.name || "S")[0]}</div>`}
-    </div>
-    <div class="header-right">
-      <div class="company-name-ar ar">${co?.nameAr || ""}</div>
-      ${[co?.addressAr, co?.vatNumber ? "رقم التسجيل الضريبي " + co.vatNumber : "", co?.crNumber ? "رقم السجل التجاري " + co.crNumber : ""].filter(Boolean).map(l => `<div class="ar">${l}</div>`).join("")}
+<!-- HEADER -->
+<div class="header">
+  <div class="hdr-left">
+    <div class="co-name">${co?.name || ""}</div>
+    ${companyLeftLines}
+  </div>
+  <div class="hdr-center">${logoHtml}</div>
+  <div class="hdr-right">
+    <div class="co-name-ar ar">${co?.nameAr || ""}</div>
+    ${companyRightLines}
+  </div>
+</div>
+
+<!-- TITLE -->
+<div class="title-row">
+  <span class="title-en">${titleEN}</span>
+  <span class="title-ar">${titleAR}</span>
+</div>
+<hr class="title-divider"/>
+
+<!-- INFO GRID -->
+<table class="info-table">
+  ${infoRow("Customer", inv.customerName || "", "العميل", inv.customerNameAr || inv.customerName || "")}
+  ${infoRow("Address", inv.customerAddress || "", "العنوان", inv.customerAddress || "")}
+  ${infoRow("VAT number", inv.customerVatNumber || "", "رقم التسجيل الضريبي", inv.customerVatNumber || "")}
+  ${infoRow("Invoice number", invNum, "رقم الفاتورة", invNum)}
+  ${infoRow("Date", inv.issueDate || "", "التاريخ", inv.issueDate || "")}
+  ${(inv as any).projectName ? infoRow("Project", (inv as any).projectName, "المشروع", (inv as any).projectName) : ""}
+  ${inv.dueDate ? infoRow("Due date", inv.dueDate, "تاريخ الاستحقاق", inv.dueDate) : ""}
+</table>
+
+<!-- ITEMS TABLE -->
+<div class="items-wrap">
+<table class="items-table">
+  <thead>
+    <tr>
+      <th style="width:22px">#</th>
+      <th>Description<span class="ar-hd">الوصف</span></th>
+      <th style="width:44px">Qty<span class="ar-hd">الكمية</span></th>
+      <th style="width:58px">Price<span class="ar-hd">السعر</span></th>
+      <th style="width:72px">Taxable amount<span class="ar-hd">المبلغ الخاضع للضريبة</span></th>
+      <th style="width:64px">VAT amount<span class="ar-hd">القيمة المضافة</span></th>
+      <th style="width:70px">Line amount<span class="ar-hd">المجموع</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    ${lineRows || `<tr><td colspan="7" style="text-align:center;color:#999;padding:12px;">No items</td></tr>`}
+  </tbody>
+</table>
+</div>
+
+<!-- BOTTOM: QR left + TOTALS right -->
+<div class="bottom">
+  <div class="qr-block">
+    ${qrUrl ? `<img src="${qrUrl}" alt="ZATCA QR Code"/>` : `<div style="width:88px;height:88px;background:#f1f5f9;border:0.5px dashed #aaa;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#999;text-align:center;">QR Code</div>`}
+    <div class="qr-note">
+      This QR code is encoded as per ZATCA e-invoicing requirements
+      <span class="ar">تم ترميز هذا الرمز وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك للفوترة الإلكترونية</span>
     </div>
   </div>
-
-  <!-- TITLE -->
-  <div class="title-row">
-    ${titleEN} &nbsp;&nbsp; <span class="ar">${titleAR}</span>
-  </div>
-  <hr class="divider"/>
-
-  <!-- INFO GRID -->
-  <table class="info-table">
-    ${row("Customer", inv.customerName || "", "العميل", inv.customerNameAr || inv.customerName || "")}
-    ${inv.customerAddress ? row("Address", inv.customerAddress, "العنوان", inv.customerAddress) : ""}
-    ${inv.customerVatNumber ? row("VAT number", inv.customerVatNumber, "رقم التسجيل الضريبي", inv.customerVatNumber) : ""}
-    ${row("Invoice number", inv.invoiceNumber || "", "رقم الفاتورة", inv.invoiceNumber || "")}
-    ${row("Date", inv.issueDate || "", "التاريخ", inv.issueDate || "")}
-    ${(inv as any).projectName ? row("Project", (inv as any).projectName, "المشروع", (inv as any).projectName) : ""}
-    ${inv.dueDate ? row("Due date", inv.dueDate, "تاريخ الاستحقاق", inv.dueDate) : ""}
-  </table>
-
-  <!-- ITEMS TABLE -->
-  <table class="items-table">
-    <thead>
+  <div>
+    <table class="totals-table">
       <tr>
-        <th style="width:24px">#</th>
-        <th>Description<span class="ar">الوصف</span></th>
-        <th style="width:46px">Qty<span class="ar">الكمية</span></th>
-        <th style="width:60px">Price<span class="ar">السعر</span></th>
-        <th style="width:74px">Taxable Amount<span class="ar">المبلغ الخاضع</span></th>
-        <th style="width:64px">VAT Amount<span class="ar">القيمة المضافة</span></th>
-        <th style="width:70px">Line Amount<span class="ar">المجموع</span></th>
+        <td class="tot-lbl">Subtotal<span class="ar">المجموع الفرعي</span></td>
+        <td class="tot-val">${(inv.subtotal || 0).toFixed(2)}<br/><span style="font-size:7pt;font-weight:400">ریال</span></td>
       </tr>
-    </thead>
-    <tbody>
-      ${lineRows}
-    </tbody>
-  </table>
-
-  <!-- BOTTOM: QR + TOTALS -->
-  <div class="bottom-section">
-    <div class="qr-block">
-      ${qrUrl ? `<img src="${qrUrl}" alt="ZATCA QR"/>` : ""}
-      <div class="qr-note">
-        This QR code is encoded as per ZATCA e-invoicing requirements
-        <span class="ar">تم ترميز هذا الرمز وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك للفوترة الإلكترونية</span>
-      </div>
-    </div>
-    <div>
-      <table class="totals-table">
-        <tr>
-          <td class="tot-label">Subtotal <span class="ar">المجموع الفرعي</span></td>
-          <td class="tot-val">${(inv.subtotal || 0).toFixed(2)} ریال</td>
-        </tr>
-        <tr>
-          <td class="tot-label">Total VAT <span class="ar">إجمالي ضريبة القيمة المضافة</span></td>
-          <td class="tot-val">${(inv.totalVat || 0).toFixed(2)} ریال</td>
-        </tr>
-        <tr class="grand">
-          <td class="tot-label">Total <span class="ar">المجموع شامل القيمة المضافة</span></td>
-          <td class="tot-val">${(inv.grandTotal || 0).toFixed(2)} ریال</td>
-        </tr>
-      </table>
-    </div>
+      <tr>
+        <td class="tot-lbl">إضافة Total VAT<span class="ar">إجمالي ضريبة القيمة المضافة</span></td>
+        <td class="tot-val">${(inv.totalVat || 0).toFixed(2)}<br/><span style="font-size:7pt;font-weight:400">ریال</span></td>
+      </tr>
+      <tr class="grand-row">
+        <td class="tot-lbl">Total<span class="ar">المجموع شامل القيمة المضافة</span></td>
+        <td class="tot-val">${(inv.grandTotal || 0).toFixed(2)}<br/><span style="font-size:7pt;font-weight:400">ریال</span></td>
+      </tr>
+    </table>
   </div>
+</div>
 
-  <!-- FOOTER: SIGNATORY + STAMP -->
-  <div class="footer-section">
-    <div class="sig-block">
-      <div style="font-size:8pt;color:#64748b">Signature</div>
-      <div class="sig-line"></div>
-      <div class="sig-name">${co?.signatoryName || ""}</div>
-      <div class="sig-title">${co?.signatoryTitle || ""}</div>
-      <div class="sig-label">Authorized Signatory / <span class="ar">المفوض بالتوقيع</span></div>
-    </div>
-    <div class="stamp-block">
-      ${co?.stamp ? `<img src="${co.stamp}" alt="stamp"/>` : ""}
-      <div class="stamp-label">Company Stamp / <span class="ar">ختم الشركة</span></div>
-    </div>
+<!-- FOOTER: SIGNATORY + STAMP -->
+<hr class="footer-divider"/>
+<div class="footer">
+  <div>
+    <div class="sig-label">Signature</div>
+    <div class="sig-line"></div>
+    <div class="sig-name">${co?.signatoryName || ""}</div>
+    ${co?.signatoryTitle ? `<div class="sig-title">${co.signatoryTitle}</div>` : ""}
+    <div class="sig-role">Authorized Signatory / <span class="ar">المفوض بالتوقيع</span></div>
   </div>
-
-  <!-- PAGE FOOTER -->
-  <div class="page-footer">
-    <span>${co?.name || ""} <span class="ar">${co?.nameAr || ""}</span></span>
-    <span>Page 1 of 1 - ${inv.invoiceNumber}</span>
-    <span>${inv.invoiceNumber}</span>
+  <div class="stamp-block">
+    ${co?.stamp ? `<img src="${co.stamp}" alt="Company Stamp"/>` : ""}
+    <div class="stamp-label">Company Stamp / <span class="ar">ختم الشركة</span></div>
   </div>
+</div>
 
+<!-- PAGE FOOTER -->
+<div class="page-footer">
+  <span>${co?.name || ""} <span class="ar"> / ${co?.nameAr || ""}</span></span>
+  <span>Page 1 of 1 - ${invNum}</span>
+  <span>${invNum}</span>
+</div>
+
+<script>
+window.onload = function() {
+  document.title = "${invNum}";
+  setTimeout(function() { window.print(); }, 700);
+};
+</script>
 </body>
 </html>`;
 
-    // Use blob URL so browser saves with the invoice number as filename
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const blobUrl = URL.createObjectURL(blob);
-
-    const win = window.open(blobUrl, "_blank", "width=900,height=750");
+    const win = window.open(blobUrl, "_blank", "width=960,height=800");
     if (win) {
-      // Set the document title so "Save as PDF" uses the invoice number
       win.addEventListener("load", () => {
         try {
-          win.document.title = inv.invoiceNumber || "Invoice";
-          setTimeout(() => {
-            win.print();
-            // Clean up blob URL after a delay
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-          }, 600);
+          win.document.title = invNum;
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
         } catch {}
       });
     } else {
-      // Fallback: direct download as HTML (user can open and print)
       const a = document.createElement("a");
       a.href = blobUrl;
-      a.download = `${inv.invoiceNumber}.html`;
+      a.download = `${invNum}.html`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-      toast.success(language === "ar" ? "تم تنزيل الفاتورة" : `Invoice downloaded as ${inv.invoiceNumber}.html — open it and print to PDF`);
+      toast.success(language === "ar" ? "تم تنزيل الفاتورة" : `Downloaded as ${invNum}.html — open and print to PDF`);
     }
   };
 
-  const handleOpenEdit = (inv: Invoice) => {
+    const handleOpenEdit = (inv: Invoice) => {
     setEditingInvoice(inv);
     setEditIssueDate(inv.issueDate || "");
     setEditDueDate(inv.dueDate || "");
