@@ -109,26 +109,89 @@ export const QuotationsPage: React.FC = () => {
   React.useEffect(() => {
     if (!showExportModal || !currentCompany) return;
     const q = query(collection(db, "companies", currentCompany.id, "signatories"), where("isActive", "==", true));
-    getDocs(q).then(snap => setExpSignatories(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    getDocs(q).then(snap => {
+      const sigs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setExpSignatories(sigs);
+      // Auto-select signatory from quotation if exists and not already set
+      if (exportingQuotation && (exportingQuotation as any).signatoryId && !expSigId) {
+        const found = sigs.find((s: any) => s.id === (exportingQuotation as any).signatoryId);
+        if (found) { setExpSigId(found.id); setExpIncludeSig(!!(found as any).signatureUrl); }
+      }
+      // If only one signatory exists, auto-select it
+      if (sigs.length === 1 && !expSigId) {
+        setExpSigId(sigs[0].id);
+        setExpIncludeSig(!!(sigs[0] as any).signatureUrl);
+      }
+    });
     const lhs: any[] = [{ id: "primary", name: language === "ar" ? "الترويسة الرئيسية" : "Primary Letterhead", url: "" }];
     ((currentCompany as any).additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
     setExpLetterheads(lhs);
   }, [showExportModal, currentCompany]);
 
-  const loadImageAsBase64 = (url: string): Promise<string> =>
-    new Promise((resolve, reject) => {
-      if (url.startsWith("data:")) { resolve(url); return; }
-      const img = new window.Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
+  // ── Robust image loader: IndexedDB cache → fetch+CORS → white canvas composite ──
+  const loadImageAsBase64 = async (url: string): Promise<string> => {
+    if (!url) throw new Error("No URL");
+    if (url.startsWith("data:")) return url;
+
+    // 1. Try IndexedDB cache first
+    try {
+      const cacheKey = "img_cache_" + btoa(url.slice(0, 100)).replace(/[^a-z0-9]/gi, "");
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) return cached;
+
+      // 2. Fetch and convert to data URL (handles CORS via fetch API)
+      let dataUrl = url;
+      try {
+        const resp = await fetch(url, { mode: "cors", credentials: "omit" });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          dataUrl = await new Promise<string>((res, rej) => {
+            const reader = new FileReader();
+            reader.onloadend = () => res(reader.result as string);
+            reader.onerror = rej;
+            reader.readAsDataURL(blob);
+          });
+          // Cache for future use
+          try { localStorage.setItem(cacheKey, dataUrl); } catch {}
+        }
+      } catch (fetchErr) {
+        console.warn("[loadImageAsBase64] fetch failed, trying direct load:", fetchErr);
+        // fallback to direct img load below
+      }
+
+      // 3. Load image element
+      const rawImg = await new Promise<HTMLImageElement>((res, rej) => {
+        const img = new window.Image();
+        if (dataUrl.startsWith("http")) img.crossOrigin = "anonymous";
+        img.onload = () => res(img);
+        img.onerror = () => rej(new Error("Image load failed: " + url.slice(0, 60)));
+        img.src = dataUrl;
+      });
+
+      // 4. Composite on white canvas (fixes transparency + jsPDF black-square bug)
+      try {
         const canvas = document.createElement("canvas");
-        canvas.width = img.width; canvas.height = img.height;
-        canvas.getContext("2d")!.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = reject;
-      img.src = url;
-    });
+        canvas.width = rawImg.naturalWidth || rawImg.width || 200;
+        canvas.height = rawImg.naturalHeight || rawImg.height || 200;
+        const ctx = canvas.getContext("2d", { alpha: false });
+        if (ctx && canvas.width > 0 && canvas.height > 0) {
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(rawImg, 0, 0);
+          const composited = canvas.toDataURL("image/jpeg", 0.95);
+          try { localStorage.setItem(cacheKey, composited); } catch {}
+          return composited;
+        }
+      } catch (canvasErr) {
+        console.warn("[loadImageAsBase64] canvas composite failed:", canvasErr);
+      }
+
+      return dataUrl;
+    } catch (err) {
+      console.error("[loadImageAsBase64] all methods failed:", err);
+      throw err;
+    }
+  };
 
   const handleNewQuotation = async () => {
     resetForm();
@@ -150,6 +213,33 @@ export const QuotationsPage: React.FC = () => {
 
   const openExportModal = (q: Quotation) => {
     setExportingQuotation(q);
+
+    const co = currentCompany as any;
+
+    // ── Smart defaults: read company profile preferences ──
+    // Default letterhead ON if company has a letterhead image uploaded
+    const hasLetterhead = !!(co?.letterhead || co?.letterheadUrl ||
+      (co?.additionalLetterheads && co.additionalLetterheads.length > 0));
+    setExpLetterhead(co?.defaultShowLetterhead ?? hasLetterhead);
+
+    // Default logo ON if company has a logo
+    setExpLogo(co?.defaultShowLogo ?? !!(co?.logo));
+
+    // Default stamp ON if company has a stamp
+    setExpStamp(co?.defaultShowStamp ?? !!(co?.stamp));
+
+    // Default letterhead selection
+    setExpLHId("primary");
+
+    // ── Auto-select signatory saved on the quotation ──
+    if ((q as any).signatoryId) {
+      setExpSigId((q as any).signatoryId);
+      setExpIncludeSig(true);
+    } else {
+      setExpSigId("");
+      setExpIncludeSig(false);
+    }
+
     setShowExportModal(true);
   };
   const [showForm, setShowForm]       = React.useState(false);
