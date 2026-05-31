@@ -1394,13 +1394,14 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
                 onClick={async () => {
                   if (!exportingQuotation) return;
                   setGeneratingPdf(true);
+                  // Close modal first so window.open isn't blocked by modal z-index
+                  setShowExportModal(false);
                   try {
                     await exportQuotationPDF(exportingQuotation, {
                       letterhead: expLetterhead, lhId: expLHId,
                       logo: expLogo, stamp: expStamp,
                       sigId: expSigId, includeSig: expIncludeSig,
                     });
-                    setShowExportModal(false);
                   } finally { setGeneratingPdf(false); }
                 }}
                 disabled={generatingPdf}
