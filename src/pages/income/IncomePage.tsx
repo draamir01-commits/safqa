@@ -454,7 +454,7 @@ export const IncomePage: React.FC = () => {
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
         title={language === "ar" ? "سجل الإيرادات" : "Income Registry"}
-        itemCount={filtered.length}
+        itemCount={income?.length}
       />
 
       {/* Document Viewer */}
