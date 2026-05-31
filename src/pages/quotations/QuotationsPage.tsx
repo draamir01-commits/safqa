@@ -699,13 +699,7 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
 </script>
 </body></html>`;
 
-    // Write directly to pre-opened window (window must be opened before async work to avoid popup blockers)
-    if ((exportQuotationPDF as any)._win && !(exportQuotationPDF as any)._win.closed) {
-      const win = (exportQuotationPDF as any)._win;
-      win.document.open();
-      win.document.write(html);
-      win.document.close();
-    }
+    return html;
   };
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -744,7 +738,46 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
           <p className="text-sm text-slate-500 mt-0.5">{language==="ar"?"إنشاء وإدارة عروض الأسعار":"Create and manage quotations with revision tracking"}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={()=>setShowPrint(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors">
+          <button
+            onClick={() => {
+              // Open window first to avoid popup blocker
+              const win = window.open("", "_blank", "width=960,height=700");
+              if (!win) { toast.error("Please allow popups"); return; }
+              const rows = filtered.map((q, i) => `<tr style="background:${i%2===0?"#fff":"#f8fafc"}">
+                <td style="padding:6px 10px;border:0.5px solid #e2e8f0;font-size:8pt;font-weight:700;color:#1d4ed8">${q.quotationNumber}</td>
+                <td style="padding:6px 10px;border:0.5px solid #e2e8f0;font-size:8pt">${q.customerName}</td>
+                <td style="padding:6px 10px;border:0.5px solid #e2e8f0;font-size:8pt">${(q as any).projectName||""}</td>
+                <td style="padding:6px 10px;border:0.5px solid #e2e8f0;font-size:8pt">${q.issueDate}</td>
+                <td style="padding:6px 10px;border:0.5px solid #e2e8f0;font-size:8pt">${q.status}</td>
+                <td style="padding:6px 10px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right;font-weight:700">${(q.grandTotal||0).toFixed(2)} SAR</td>
+              </tr>`).join("");
+              const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Quotations Register</title>
+              <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;padding:15mm;font-size:9pt}
+              @media print{@page{size:A4;margin:0}body{padding:10mm}}</style></head><body>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #e2e8f0">
+                <div><div style="font-size:14pt;font-weight:700">${currentCompany?.name||""}</div>
+                <div style="font-size:8pt;color:#666;margin-top:2px">Quotations Register — ${new Date().toLocaleDateString()}</div></div>
+                <div style="font-size:8pt;color:#666">${filtered.length} record(s)</div>
+              </div>
+              <table style="width:100%;border-collapse:collapse">
+                <thead><tr style="background:#1e293b;color:#fff">
+                  <th style="padding:7px 10px;text-align:left;font-size:8pt;border:0.5px solid #334155">Quotation #</th>
+                  <th style="padding:7px 10px;text-align:left;font-size:8pt;border:0.5px solid #334155">Customer</th>
+                  <th style="padding:7px 10px;text-align:left;font-size:8pt;border:0.5px solid #334155">Project</th>
+                  <th style="padding:7px 10px;text-align:left;font-size:8pt;border:0.5px solid #334155">Date</th>
+                  <th style="padding:7px 10px;text-align:left;font-size:8pt;border:0.5px solid #334155">Status</th>
+                  <th style="padding:7px 10px;text-align:right;font-size:8pt;border:0.5px solid #334155">Total</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+              <div style="margin-top:12px;padding-top:8px;border-top:0.5px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#999">
+                <span>${currentCompany?.name||""}</span><span>Page 1 of 1</span><span>Quotations Register</span>
+              </div>
+              <script>window.onload=function(){setTimeout(function(){window.print()},600)}</script>
+              </body></html>`;
+              win.document.open(); win.document.write(html); win.document.close();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors">
             <Printer className="h-3.5 w-3.5" />{language==="ar"?"طباعة":"Print"}
           </button>
           <Button onClick={handleNewQuotation} className="flex items-center gap-2">
@@ -1390,25 +1423,32 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
               <button
                 onClick={async () => {
                   if (!exportingQuotation) return;
-                  // Open window IMMEDIATELY on click (before any async) to avoid popup blocker
+                  // Open window FIRST (synchronously, before any await) to bypass popup blocker
                   const win = window.open("", "_blank", "width=960,height=800");
                   if (!win) {
-                    toast.error(language === "ar" ? "يرجى السماح بالنوافذ المنبثقة" : "Please allow popups in your browser settings");
+                    toast.error(language === "ar" ? "يرجى السماح بالنوافذ المنبثقة في المتصفح" : "Please allow popups in your browser to export PDF");
                     return;
                   }
-                  win.document.write(`<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;color:#666"><p>Generating quotation PDF...</p></body></html>`);
-                  (exportQuotationPDF as any)._win = win;
+                  // Show loading immediately
+                  win.document.write("<html><body style='font-family:sans-serif;padding:40px;color:#555'>Generating PDF, please wait...</body></html>");
                   setGeneratingPdf(true);
                   setShowExportModal(false);
                   try {
-                    await exportQuotationPDF(exportingQuotation, {
+                    const html = await exportQuotationPDF(exportingQuotation, {
                       letterhead: expLetterhead, lhId: expLHId,
                       logo: expLogo, stamp: expStamp,
                       sigId: expSigId, includeSig: expIncludeSig,
                     });
+                    // Now write the real HTML into the already-open window
+                    win.document.open();
+                    win.document.write(html as string);
+                    win.document.close();
+                    win.document.title = exportingQuotation.quotationNumber || "Quotation";
+                  } catch(e) {
+                    win.close();
+                    toast.error("Failed to generate PDF");
                   } finally {
                     setGeneratingPdf(false);
-                    (exportQuotationPDF as any)._win = null;
                   }
                 }}
                 disabled={generatingPdf}
