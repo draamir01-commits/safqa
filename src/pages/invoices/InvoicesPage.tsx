@@ -185,52 +185,189 @@ export const InvoicesPage: React.FC = () => {
   };
 
   const handlePrint = () => {
-    const printContent = document.getElementById("zatca-print-frame");
-    if (!printContent) return;
+    if (!selectedInvoice) return;
 
-    const originalContent = document.body.innerHTML;
-    const printHTML = printContent.innerHTML;
+    // Get the rendered invoice HTML
+    const printFrame = document.getElementById("zatca-print-frame");
+    if (!printFrame) return;
 
-    // Direct window.print trigger with clean context swapping
-    const win = window.open("", "_blank");
-    if (win) {
-      win.document.open();
-      win.document.write(`
-        <html>
-          <head>
-            <title>${selectedInvoice?.invoiceNumber || "Invoice"}</title>
-            <style>
-              body { font-family: 'Cairo', 'Inter', sans-serif; padding: 25px; color: #1e293b; background: white; }
-              @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;600;700&display=swap');
-              @media print {
-                .no-print { display: none; }
-              }
-              table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; }
-              th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: right; }
-              .rtl { direction: rtl; }
-              .ltr { direction: ltr; }
-              .flex { display: flex; }
-              .justify-between { justify-content: space-between; }
-              .grid { display: grid; }
-              .grid-cols-2 { grid-template-columns: 1fr 1fr; }
-              .gap-4 { gap: 16px; }
-              .text-xs { font-size: 11px; }
-              .text-sm { font-size: 13px; }
-              .font-bold { font-weight: bold; }
-              .font-mono { font-family: monospace; }
-              .border { border: 1px solid #e2e8f0; }
-              .rounded-lg { border-radius: 8px; }
-              .p-4 { padding: 16px; }
-              .p-6 { padding: 24px; }
-            </style>
-          </head>
-          <body onload="style(); window.print(); window.close();">
-            <div class="${language === "ar" ? "rtl" : "ltr"}">${printHTML}</div>
-          </body>
-        </html>
-      `);
-      win.document.close();
+    // Clone to get current rendered HTML including QR img src (which is a base64 data URL)
+    const clone = printFrame.cloneNode(true) as HTMLElement;
+
+    // Replace any external QR image with the already-generated base64 data URL
+    if (qrDataUrl) {
+      const imgs = clone.querySelectorAll("img[alt='ZATCA QR Code']");
+      imgs.forEach(img => { (img as HTMLImageElement).src = qrDataUrl; });
     }
+
+    const printHTML = clone.innerHTML;
+    const dir = language === "ar" ? "rtl" : "ltr";
+    const isRtl = language === "ar";
+
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) {
+      // Popup blocked — fallback: inject CSS and use window.print() directly
+      const style = document.createElement("style");
+      style.id = "safqa-print-style";
+      style.textContent = `
+        @media print {
+          body > *:not(#safqa-print-root) { display: none !important; }
+          #safqa-print-root { display: block !important; }
+        }
+      `;
+      document.head.appendChild(style);
+      const root = document.createElement("div");
+      root.id = "safqa-print-root";
+      root.innerHTML = printHTML;
+      document.body.appendChild(root);
+      window.print();
+      document.body.removeChild(root);
+      document.head.removeChild(style);
+      return;
+    }
+
+    win.document.write(`<!DOCTYPE html>
+<html dir="${dir}" lang="${isRtl ? "ar" : "en"}">
+<head>
+  <meta charset="UTF-8" />
+  <title>${selectedInvoice.invoiceNumber || "Invoice"}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cairo', 'Inter', Arial, sans-serif;
+      color: #1e293b;
+      background: #ffffff;
+      padding: 20px;
+      font-size: 13px;
+      direction: ${dir};
+    }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none !important; }
+      @page { size: A4; margin: 15mm; }
+    }
+    /* Tailwind utility overrides for print */
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-start { align-items: flex-start; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-1 { gap: 4px; }
+    .gap-2 { gap: 8px; }
+    .gap-4 { gap: 16px; }
+    .gap-6 { gap: 24px; }
+    .grid { display: grid; }
+    .grid-cols-2 { grid-template-columns: 1fr 1fr; }
+    .w-full { width: 100%; }
+    .max-w-xs { max-width: 320px; }
+    .max-w-sm { max-width: 384px; }
+    .max-h-full { max-height: 100%; }
+    .max-w-full { max-width: 100%; }
+    .h-32 { height: 128px; }
+    .w-32 { width: 128px; }
+    .h-14 { height: 56px; }
+    .w-14 { width: 56px; }
+    .h-16 { height: 64px; }
+    .w-16 { width: 64px; }
+    .p-1 { padding: 4px; }
+    .p-2 { padding: 8px; }
+    .p-3 { padding: 12px; }
+    .p-4 { padding: 16px; }
+    .p-6 { padding: 24px; }
+    .px-3 { padding-left: 12px; padding-right: 12px; }
+    .py-2 { padding-top: 8px; padding-bottom: 8px; }
+    .py-2\.5 { padding-top: 10px; padding-bottom: 10px; }
+    .pb-4 { padding-bottom: 16px; }
+    .pb-1\.5 { padding-bottom: 6px; }
+    .pt-2 { padding-top: 8px; }
+    .pt-4 { padding-top: 16px; }
+    .pt-5 { padding-top: 20px; }
+    .mt-1 { margin-top: 4px; }
+    .mb-1 { margin-bottom: 4px; }
+    .border { border: 1px solid #e2e8f0; }
+    .border-b { border-bottom: 1px solid #e2e8f0; }
+    .border-t { border-top: 1px solid #e2e8f0; }
+    .border-l { border-left: 1px solid #e2e8f0; }
+    .border-r { border-right: 1px solid #e2e8f0; }
+    .border-slate-200 { border-color: #e2e8f0; }
+    .border-slate-100 { border-color: #f1f5f9; }
+    .border-dashed { border-style: dashed; }
+    .rounded { border-radius: 4px; }
+    .rounded-lg { border-radius: 8px; }
+    .rounded-sm { border-radius: 2px; }
+    .bg-white { background-color: #ffffff; }
+    .bg-slate-50 { background-color: #f8fafc; }
+    .bg-slate-100 { background-color: #f1f5f9; }
+    .bg-brand-primary { background-color: #1d4ed8; }
+    .bg-blue-50 { background-color: #eff6ff; }
+    .text-right { text-align: right; }
+    .text-left { text-align: left; }
+    .text-center { text-align: center; }
+    .font-bold { font-weight: 700; }
+    .font-semibold { font-weight: 600; }
+    .font-medium { font-weight: 500; }
+    .font-mono { font-family: monospace; }
+    .text-xs { font-size: 11px; line-height: 1.4; }
+    .text-sm { font-size: 13px; line-height: 1.5; }
+    .text-base { font-size: 15px; }
+    .text-lg { font-size: 18px; }
+    .text-xl { font-size: 20px; }
+    .text-\[10px\] { font-size: 10px; }
+    .text-\[9px\]  { font-size: 9px; }
+    .text-\[8px\]  { font-size: 8px; }
+    .text-slate-800 { color: #1e293b; }
+    .text-slate-700 { color: #334155; }
+    .text-slate-600 { color: #475569; }
+    .text-slate-500 { color: #64748b; }
+    .text-slate-400 { color: #94a3b8; }
+    .text-brand-primary { color: #1d4ed8; }
+    .text-emerald-600 { color: #059669; }
+    .text-white { color: #ffffff; }
+    .text-teal-800 { color: #115e59; }
+    .text-red-800 { color: #991b1b; }
+    .uppercase { text-transform: uppercase; }
+    .tracking-wide { letter-spacing: 0.025em; }
+    .tracking-tight { letter-spacing: -0.025em; }
+    .tracking-widest { letter-spacing: 0.1em; }
+    .leading-tight { line-height: 1.25; }
+    .leading-none { line-height: 1; }
+    .break-all { word-break: break-all; }
+    .shrink-0 { flex-shrink: 0; }
+    .object-contain { object-fit: contain; }
+    .select-none { user-select: none; }
+    .divide-y > * + * { border-top: 1px solid #f1f5f9; }
+    .divide-slate-100 > * + * { border-top-color: #f1f5f9; }
+    .hover\:bg-slate-50\/20:hover { background-color: rgba(248,250,252,0.2); }
+    .rtl { direction: rtl; }
+    .ltr { direction: ltr; }
+    .pl-4 { padding-left: 16px; }
+    .pr-4 { padding-right: 16px; }
+    .rtl\:pl-0 { padding-left: 0; }
+    .rtl\:pr-4 { padding-right: 16px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 12px; }
+    .inline-block { display: inline-block; }
+    .self-start { align-self: flex-start; }
+    .md\:flex-row { flex-direction: row; }
+    .md\:max-w-xs { max-width: 320px; }
+    .md\:items-start { align-items: flex-start; }
+    .ltr\:text-left { text-align: left; }
+    .rtl\:text-right { text-align: right; }
+  </style>
+</head>
+<body>
+  <div>${printHTML}</div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 400);
+    };
+  </script>
+</body>
+</html>`);
+
+    win.document.close();
   };
 
   const columns: Column<Invoice>[] = [
