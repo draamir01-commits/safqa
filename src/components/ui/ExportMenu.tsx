@@ -222,16 +222,45 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
       let y = 15;
 
       // ── LETTERHEAD ──────────────────────────────────────────────────────────
+      // Safe content margins (same as TechBridge)
+      const SAFE_HEADER_MARGIN = 48;
+      const SAFE_FOOTER_MARGIN = 35;
+      let isFullPage = false;
+      let lhImgB64 = "";
+
       if (includeLetterhead) {
         const selectedLH = letterheads.find(l => l.id === selectedLetterheadId);
         if (selectedLH && selectedLH.url) {
           try {
-            const b64 = await loadImageAsBase64(selectedLH.url);
-            doc.addImage(b64, "PNG", 0, 0, pw, 35);
-            y = 40;
-          } catch { /* fallback to text header */ }
-        } else {
-          // Primary letterhead — text-based
+            lhImgB64 = await loadImageAsBase64(selectedLH.url);
+            // Detect if full-page letterhead (A4 ratio: height/width > 1.15)
+            const tmpImg = new window.Image();
+            await new Promise<void>(res => { tmpImg.onload = () => res(); tmpImg.onerror = () => res(); tmpImg.src = lhImgB64; });
+            const ratio = tmpImg.naturalHeight / tmpImg.naturalWidth;
+            isFullPage = ratio > 1.15;
+
+            if (isFullPage) {
+              // Full-page background — draw on first page
+              doc.addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
+              y = SAFE_HEADER_MARGIN;
+              // Monkey-patch addPage so letterhead redraws on every new page
+              const origAddPage = doc.addPage.bind(doc);
+              (doc as any).addPage = function() {
+                const result = origAddPage.apply(this, arguments as any);
+                (this as any).addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
+                return result;
+              };
+            } else {
+              // Partial header image (banner-style)
+              const imgH = pw * (tmpImg.naturalHeight / tmpImg.naturalWidth);
+              doc.addImage(lhImgB64, "PNG", 0, 0, pw, imgH, undefined, "FAST");
+              y = imgH + 6;
+            }
+          } catch { /* fallback to text header below */ }
+        }
+
+        // Fallback text header (when no image or image load failed)
+        if (y === 15) {
           doc.setFillColor(15, 23, 42);
           doc.rect(0, 0, pw, 28, "F");
           if (includeLogo && (currentCompany as any)?.logo) {
@@ -299,7 +328,22 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
           headStyles: { fillColor: [29, 78, 216], textColor: 255, fontStyle: "bold", fontSize: 7 },
           alternateRowStyles: { fillColor: [245, 247, 250] },
           styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
-          margin: { top: 15, bottom: selectedSig ? 50 : 30 },
+          margin: { top: isFullPage ? SAFE_HEADER_MARGIN : 15, bottom: isFullPage ? SAFE_FOOTER_MARGIN : (selectedSig ? 50 : 30) },
+          didDrawPage: () => {
+            // Redraw full-page letterhead on top on new pages (foreground clips)
+            if (isFullPage && lhImgB64) {
+              try {
+                doc.saveGraphicsState();
+                doc.rect(0, 0, pw, SAFE_HEADER_MARGIN - 4).clip();
+                doc.addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
+                doc.restoreGraphicsState();
+                doc.saveGraphicsState();
+                doc.rect(0, ph - SAFE_FOOTER_MARGIN + 2, pw, SAFE_FOOTER_MARGIN - 2).clip();
+                doc.addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
+                doc.restoreGraphicsState();
+              } catch {}
+            }
+          },
           rowPageBreak: "avoid",
         });
         y = (doc as any).lastAutoTable.finalY + 8;
