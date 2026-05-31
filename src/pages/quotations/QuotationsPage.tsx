@@ -7,8 +7,6 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
@@ -468,298 +466,252 @@ export const QuotationsPage: React.FC = () => {
 
   // ── PDF export — professional layout matching reference ─────────────────
   const exportQuotationPDF = async (q: Quotation, opts?: { letterhead: boolean; lhId: string; logo: boolean; stamp: boolean; sigId: string; includeSig: boolean; }) => {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const pw = doc.internal.pageSize.getWidth();
-    const ph_total = doc.internal.pageSize.getHeight();
-    const ML = 14; const MR = 14; const TW = pw - ML - MR;
-    let y = 0;
+    const co = currentCompany as any;
+    const qNum = q.quotationNumber || "Quotation";
     const o = opts || { letterhead: false, lhId: "primary", logo: false, stamp: false, sigId: "", includeSig: false };
+    const selectedSig = o.sigId ? expSignatories.find((s: any) => s.id === o.sigId) : null;
 
-    // Helper: add letterhead on every page
-    const addLetterhead = async (pageDoc: any) => {
-      if (!o.letterhead) return 0;
-      const selLH = expLetterheads.find((l: any) => l.id === o.lhId);
-      if (selLH && selLH.url) {
-        try {
-          const b64 = await loadImageAsBase64(selLH.url);
-          pageDoc.addImage(b64, "PNG", 0, 0, pw, 38);
-          pageDoc.setDrawColor(220); pageDoc.line(ML, 39, pw - MR, 39);
-          return 44;
-        } catch {}
-      }
-      // Primary letterhead — two-column text layout like reference
-      const lhH = 38;
-      pageDoc.setFillColor(255, 255, 255);
-      // Left col — company EN
-      const logoUrl = (currentCompany as any)?.logo;
-      if (o.logo && logoUrl) {
-        try {
-          const lb = await loadImageAsBase64(logoUrl);
-          pageDoc.addImage(lb, "PNG", pw/2 - 15, 6, 30, 26);
-        } catch {}
-      }
-      pageDoc.setFontSize(11); pageDoc.setFont("helvetica", "bold"); pageDoc.setTextColor(15, 23, 42);
-      pageDoc.text(currentCompany?.name || "", ML, 10);
-      pageDoc.setFontSize(7); pageDoc.setFont("helvetica", "normal"); pageDoc.setTextColor(60);
-      const leftLines = [
-        (currentCompany as any)?.address || "",
-        (currentCompany as any)?.city ? `${(currentCompany as any).city}, Kingdom of Saudi Arabia` : "",
-        (currentCompany as any)?.email || "",
-        currentCompany?.phone || "",
-        currentCompany?.vatNumber ? `VAT number ${currentCompany.vatNumber}` : "",
-        currentCompany?.crNumber ? `CR Number ${currentCompany.crNumber}` : "",
-      ].filter(Boolean);
-      let ly = 15;
-      leftLines.forEach(line => { pageDoc.text(line, ML, ly); ly += 4; });
-      // Right col — company AR
-      if (currentCompany?.nameAr) {
-        pageDoc.setFontSize(11); pageDoc.setFont("helvetica", "bold"); pageDoc.setTextColor(15, 23, 42);
-        pageDoc.text(currentCompany.nameAr, pw - MR, 10, { align: "right" });
-        pageDoc.setFontSize(7); pageDoc.setFont("helvetica", "normal"); pageDoc.setTextColor(60);
-        const rightLines = [
-          (currentCompany as any)?.addressAr || (currentCompany as any)?.address || "",
-          currentCompany?.vatNumber ? `رقم التسجيل الضريبي ${currentCompany.vatNumber}` : "",
-          currentCompany?.crNumber ? `رقم السجل التجاري ${currentCompany.crNumber}` : "",
-        ].filter(Boolean);
-        let ry = 15;
-        rightLines.forEach(line => { pageDoc.text(line, pw - MR, ry, { align: "right" }); ry += 4; });
-      }
-      pageDoc.setDrawColor(200); pageDoc.line(ML, lhH, pw - MR, lhH);
-      return lhH + 5;
-    };
+    // Company header lines
+    const leftLines = [co?.address||"", co?.city ? co.city+", Kingdom of Saudi Arabia":"",
+      co?.email||"", co?.phone||"",
+      co?.vatNumber ? "VAT number "+co.vatNumber:"",
+      co?.crNumber ? "CR Number "+co.crNumber:""]
+      .filter(Boolean).map(l=>`<div style="font-size:7.5pt;color:#444;line-height:1.7">${l}</div>`).join("");
 
-    y = await addLetterhead(doc);
-    if (y === 0) y = 12;
+    const rightLines = [co?.addressAr||co?.address||"",
+      co?.vatNumber ? "رقم التسجيل الضريبي "+co.vatNumber:"",
+      co?.crNumber ? "رقم السجل التجاري "+co.crNumber:""]
+      .filter(Boolean).map(l=>`<div style="font-family:Cairo,Arial,sans-serif;font-size:7.5pt;color:#444;line-height:1.7;direction:rtl" class="notranslate" lang="ar">${l}</div>`).join("");
 
-    // ── QUOTATION Title (centered) ──────────────────────────────────────────
-    doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-    doc.text("QUOTATION", pw / 2, y + 10, { align: "center" });
-    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(120);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, pw / 2, y + 16, { align: "center" });
-    y += 24;
+    const logoHtml = co?.logo
+      ? `<img src="${co.logo}" style="max-height:55px;max-width:110px;object-fit:contain;display:block;margin:0 auto"/>`
+      : `<div style="width:50px;height:50px;background:#1d4ed8;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18pt;font-weight:700;margin:0 auto">${(co?.nameAr||co?.name||"S")[0]}</div>`;
 
-    // Divider
-    doc.setDrawColor(220); doc.line(ML, y, pw - MR, y); y += 6;
-
-    // ── Two-column client + quotation info table ─────────────────────────────
-    const col1x = ML; const col2x = pw / 2 + 5;
-    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-    const labelW = 20;
-    const infoRows: [string, string, string, string][] = [
-      ["To:",       q.customerName,          "Date:",         q.issueDate],
-      ["Attn:",     q.attn || "",            "Quotation #:",  q.quotationNumber],
-      ["Phone:",    q.clientPhone || "",     "Project:",      q.projectName || ""],
-      ["Email:",    q.clientEmail || "",     "Location:",     q.location || ""],
-    ];
-    if (q.revision > 0) infoRows.push(["", "", "Revision:", String(q.revision)]);
-
-    infoRows.forEach(([l1, v1, l2, v2]) => {
-      doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-      if (l1) doc.text(l1, col1x, y);
-      if (l2) doc.text(l2, col2x, y);
-      doc.setFont("helvetica", "normal"); doc.setTextColor(60);
-      if (v1) doc.text(v1, col1x + labelW, y, { maxWidth: pw/2 - labelW - 5 });
-      if (v2) doc.text(v2, col2x + labelW, y, { maxWidth: pw/2 - labelW - MR });
-      y += 6;
-    });
-    y += 3;
-    doc.setDrawColor(220); doc.line(ML, y, pw - MR, y); y += 6;
-
-    // ── Opening salutation ──────────────────────────────────────────────────
-    if (q.attn || q.notes) {
-      doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-      doc.text("Kind Attn:", ML, y);
-      doc.setFont("helvetica", "normal"); doc.setTextColor(60);
-      doc.text(`Dear ${q.attn || "Sir/Madam"};`, ML + 22, y); y += 6;
-      if (q.notes) {
-        doc.text(q.notes, ML, y, { maxWidth: TW }); y += 10;
-      } else {
-        doc.text("Thank you for providing us the opportunity to quote. Please find our best prices below.", ML, y, { maxWidth: TW }); y += 10;
-      }
-    }
-
-    // ── Items Table Header ──────────────────────────────────────────────────
-    doc.setFillColor(99, 102, 241); // indigo header
-    doc.rect(ML, y, TW, 8, "F");
-    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
-    doc.text("QUOTATION ITEMS", pw / 2, y + 5.5, { align: "center" });
-    y += 10;
-
-    // ── Items ───────────────────────────────────────────────────────────────
+    // Build items rows
     const useSections = q.sections && q.sections.length > 0;
-    const allItems: any[] = [];
-
+    let itemRows = "";
+    let rowNum = 0;
     if (useSections) {
       q.sections!.forEach(sec => {
         if (sec.title) {
-          allItems.push({
-            sno: `${sec.letter}`,
-            desc: sec.title.toUpperCase(),
-            qty: null, unit: null, unitPrice: null,
-            net: null, vat: null, total: null,
-            isHeader: true,
-          });
+          itemRows += `<tr><td colspan="8" style="background:#3b82f6;color:#fff;font-weight:700;padding:5px 8px;font-size:8pt;text-align:center;border:0.5px solid #2563eb">${sec.letter}. ${sec.title.toUpperCase()}</td></tr>`;
         }
         sec.items.forEach((item, idx) => {
-          allItems.push({
-            sno: String(idx + 1),
-            desc: item.description,
-            qty: item.qty, unit: item.unit,
-            unitPrice: item.unitPrice,
-            net: item.amount,
-            vat: item.vatAmount,
-            total: item.totalAmount,
-            isHeader: false,
-          });
+          rowNum++;
+          const bg = rowNum%2===0?"#f8fafc":"#fff";
+          itemRows += `<tr style="background:${bg}">
+            <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${idx+1}</td>
+            <td style="padding:5px 7px;border:0.5px solid #cbd5e0;font-size:8pt">${item.description||""}</td>
+            <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${item.qty||1}<br><span style="font-size:7pt;color:#666">${item.unit||"PCE"}</span></td>
+            <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(item.unitPrice||0).toFixed(2)}</td>
+            <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(item.amount||0).toFixed(2)}</td>
+            <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(item.vatAmount||0).toFixed(2)}</td>
+            <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt;font-weight:700">${(item.totalAmount||0).toFixed(2)}</td>
+          </tr>`;
         });
       });
     } else {
-      q.lineItems.forEach((l, idx) => {
-        allItems.push({
-          sno: String(idx + 1),
-          desc: l.name,
-          qty: l.qty, unit: l.unit,
-          unitPrice: l.unitPrice,
-          net: l.lineTotal - l.vatAmount,
-          vat: l.vatAmount,
-          total: l.lineTotal,
-          isHeader: false,
-        });
+      (q.lineItems||[]).forEach((l:any, idx:number) => {
+        rowNum++;
+        const bg = rowNum%2===0?"#f8fafc":"#fff";
+        const net = (l.lineTotal||0)-(l.vatAmount||0);
+        itemRows += `<tr style="background:${bg}">
+          <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${idx+1}</td>
+          <td style="padding:5px 7px;border:0.5px solid #cbd5e0;font-size:8pt">${l.name||""}</td>
+          <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${l.qty||1}<br><span style="font-size:7pt;color:#666">${l.unit||"PCE"}</span></td>
+          <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(l.unitPrice||0).toFixed(2)}</td>
+          <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${net.toFixed(2)}</td>
+          <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(l.vatAmount||0).toFixed(2)}</td>
+          <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt;font-weight:700">${(l.lineTotal||0).toFixed(2)}</td>
+        </tr>`;
       });
     }
 
-    const tableBody = allItems.map(item => [
-      item.sno,
-      item.desc,
-      item.qty !== null ? String(item.qty) : "",
-      item.unit || "",
-      item.unitPrice !== null ? item.unitPrice.toFixed(2) : "",
-      item.net !== null ? item.net.toFixed(2) : "",
-      item.vat !== null ? item.vat.toFixed(2) : "",
-      item.total !== null ? item.total.toFixed(2) : "",
-    ]);
-
-    const didDrawPage = (data: any) => {
-      // Re-draw letterhead on continuation pages
-      if (data.pageNumber > 1) {
-        if (o.letterhead) addLetterhead(doc);
-      }
-    };
-
-    autoTable(doc, {
-      head: [["S/No", "Description", "Qty", "Unit", "Unit Price", "Net Amnt", "VAT", "Total Amount"]],
-      body: tableBody,
-      startY: y,
-      theme: "grid",
-      headStyles: {
-        fillColor: [30, 30, 50], textColor: 255, fontStyle: "bold", fontSize: 7,
-        halign: "center", valign: "middle", cellPadding: 3,
-      },
-      bodyStyles: { fontSize: 7, cellPadding: 3, textColor: [40, 40, 40] },
-      alternateRowStyles: { fillColor: [248, 249, 250] },
-      columnStyles: {
-        0: { cellWidth: 10, halign: "center" },
-        1: { cellWidth: "auto" },
-        2: { cellWidth: 12, halign: "center" },
-        3: { cellWidth: 14, halign: "center" },
-        4: { cellWidth: 22, halign: "right" },
-        5: { cellWidth: 22, halign: "right" },
-        6: { cellWidth: 16, halign: "right" },
-        7: { cellWidth: 24, halign: "right" },
-      },
-      didParseCell: (data: any) => {
-        const rowIdx = data.row.index;
-        if (allItems[rowIdx]?.isHeader) {
-          data.cell.styles.fillColor = [46, 95, 138];
-          data.cell.styles.textColor = [255, 255, 255];
-          data.cell.styles.fontStyle = "bold";
-          data.cell.styles.colSpan = 8;
-        }
-      },
-      willDrawPage: didDrawPage,
-      margin: { left: ML, right: MR, top: o.letterhead ? 20 : 10 },
-    });
-
-    y = (doc as any).lastAutoTable.finalY + 6;
-
-    // ── Totals (right-aligned, styled) ──────────────────────────────────────
-    const totW = 80; const totX = pw - MR - totW;
-    const totRows = [
-      { label: "TOTAL NET", value: q.subtotal.toFixed(2), bg: [238,238,238] as [number,number,number], bold: false },
-      { label: "TOTAL VAT", value: q.totalVat.toFixed(2),  bg: [238,238,238] as [number,number,number], bold: false },
-      { label: "GRAND TOTAL (SAR)", value: q.grandTotal.toFixed(2), bg: [27,58,92] as [number,number,number], bold: true, white: true },
-    ];
-    totRows.forEach(row => {
-      doc.setFillColor(row.bg[0], row.bg[1], row.bg[2]);
-      doc.rect(totX, y, totW, 8, "F");
-      doc.setFontSize(8);
-      doc.setFont("helvetica", row.bold ? "bold" : "normal");
-      doc.setTextColor(row.white ? 255 : 40);
-      doc.text(row.label, totX + 3, y + 5.5);
-      doc.text(row.value, pw - MR - 3, y + 5.5, { align: "right" });
-      y += 8;
-    });
-    y += 10;
-
-    // ── T&C + Payment Terms on same/next page ───────────────────────────────
+    // T&C and Payment terms
     const tcList: string[] = (q as any).termsList?.filter(Boolean) || (q.terms ? q.terms.split("\n").filter(Boolean) : []);
     const ptList: string[] = (q as any).paymentTermsList?.filter(Boolean) || (q.paymentTerms ? [q.paymentTerms] : []);
 
-    const selectedSig = o.sigId ? expSignatories.find((s: any) => s.id === o.sigId) : null;
+    const tcHTML = tcList.length > 0 ? `
+      <div style="margin-top:14px">
+        <div style="font-size:9pt;font-weight:700;color:#1a1a1a;margin-bottom:6px">Terms and Conditions:</div>
+        ${tcList.map((t,i)=>`<div style="font-size:8pt;color:#444;margin-bottom:3px;padding-left:4px">${i+1}. ${t}</div>`).join("")}
+      </div>` : "";
 
-    const needsNewPage = y + (tcList.length * 6) + (ptList.length * 6) + 40 > ph_total - 30;
-    if (needsNewPage) { doc.addPage(); y = o.letterhead ? await addLetterhead(doc) : 15; }
+    const ptHTML = ptList.length > 0 ? `
+      <div style="margin-top:14px">
+        <div style="font-size:9pt;font-weight:700;color:#1a1a1a;margin-bottom:6px">Payment Terms:</div>
+        ${ptList.map(t=>`<div style="font-size:8pt;color:#444;margin-bottom:3px;padding-left:4px">- ${t}</div>`).join("")}
+      </div>` : "";
 
-    if (tcList.length > 0) {
-      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-      doc.text("Terms and Conditions:", ML, y); y += 6;
-      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
-      tcList.forEach((t, i) => {
-        const lines = doc.splitTextToSize(`${i+1}. ${t}`, TW - 4);
-        doc.text(lines, ML, y); y += lines.length * 5;
-      });
-      y += 5;
+    const sigHTML = selectedSig ? `
+      <div style="margin-top:16px">
+        <div style="font-size:9pt;font-weight:700;color:#1a1a1a;margin-bottom:8px">Authorized Signatory:</div>
+        <table style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="vertical-align:top;width:50%">
+              ${o.includeSig && (selectedSig as any).signatureUrl ? `<img src="${(selectedSig as any).signatureUrl}" style="height:40px;max-width:100px;object-fit:contain;display:block;margin-bottom:4px"/>` : ""}
+              <div style="border-bottom:1px solid #555;width:160px;margin-bottom:5px"></div>
+              <div style="font-size:9.5pt;font-weight:700">${selectedSig.name}</div>
+              <div style="font-size:8pt;color:#555;margin-top:2px">${(selectedSig as any).designation||""}</div>
+            </td>
+            <td style="vertical-align:top;text-align:right;width:50%">
+              ${o.stamp && co?.stamp ? `<img src="${co.stamp}" style="max-width:80px;max-height:80px;object-fit:contain"/>` : ""}
+              ${o.stamp ? `<div style="font-size:7.5pt;color:#888;margin-top:4px">Company Stamp</div>` : ""}
+            </td>
+          </tr>
+        </table>
+      </div>` : (o.stamp && co?.stamp ? `
+      <div style="margin-top:16px;text-align:right">
+        <img src="${co.stamp}" style="max-width:80px;max-height:80px;object-fit:contain"/>
+        <div style="font-size:7.5pt;color:#888;margin-top:4px">Company Stamp</div>
+      </div>` : "");
+
+    const html = `<!DOCTYPE html>
+<html lang="en" class="notranslate" translate="no">
+<head>
+<meta charset="UTF-8"/>
+<title>${qNum}</title>
+<style>
+${FONT_CSS}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+body{font-family:Cairo,Arial,sans-serif;font-size:9pt;color:#1a1a1a;background:#fff;padding:12mm}
+table{border-collapse:collapse;width:100%}
+.notranslate{font-family:Cairo,Arial,sans-serif}
+@media print{body{padding:8mm}@page{size:A4;margin:0}.no-print{display:none!important}}
+</style>
+</head>
+<body translate="no">
+
+<!-- HEADER -->
+<table style="width:100%;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin-bottom:10px">
+  <tr>
+    <td style="width:38%;vertical-align:top">
+      <div style="font-size:11pt;font-weight:700;margin-bottom:4px">${co?.name||""}</div>
+      ${leftLines}
+    </td>
+    <td style="width:24%;text-align:center;vertical-align:middle;padding:0 8px">
+      ${logoHtml}
+    </td>
+    <td style="width:38%;text-align:right;vertical-align:top">
+      <div style="font-family:Cairo,Arial,sans-serif;font-size:11pt;font-weight:700;direction:rtl;margin-bottom:4px" class="notranslate" lang="ar">${co?.nameAr||""}</div>
+      ${rightLines}
+    </td>
+  </tr>
+</table>
+
+<!-- TITLE -->
+<div style="text-align:center;margin:8px 0 4px">
+  <span style="font-size:22pt;font-weight:800;letter-spacing:1px">QUOTATION</span>
+</div>
+<div style="text-align:center;font-size:8pt;color:#888;margin-bottom:8px">Generated on: ${new Date().toLocaleString()}</div>
+<div style="border-top:2px solid #e2e8f0;margin-bottom:10px"></div>
+
+<!-- CLIENT INFO: 2-column -->
+<table style="width:100%;margin-bottom:8px">
+  <tr>
+    <td style="width:50%;vertical-align:top;padding-right:16px">
+      <table style="width:100%">
+        ${[
+          ["To:", q.customerName||""],
+          ["Attn:", q.attn||""],
+          ["Phone:", q.clientPhone||""],
+          ["Email:", q.clientEmail||""],
+        ].filter(r=>r[1]).map(([l,v])=>`<tr>
+          <td style="font-weight:700;font-size:8pt;width:48px;padding:2px 0;color:#333">${l}</td>
+          <td style="font-size:8pt;padding:2px 0;color:#1a1a1a">${v}</td>
+        </tr>`).join("")}
+      </table>
+    </td>
+    <td style="width:50%;vertical-align:top">
+      <table style="width:100%">
+        ${[
+          ["Date:", q.issueDate||""],
+          ["Quotation #:", q.quotationNumber||""],
+          ["Project:", (q as any).projectName||""],
+          ["Location:", (q as any).location||""],
+          q.revision > 0 ? ["Revision:", String(q.revision)] : ["",""],
+        ].filter(r=>r[1]).map(([l,v])=>`<tr>
+          <td style="font-weight:700;font-size:8pt;width:80px;padding:2px 0;color:#333">${l}</td>
+          <td style="font-size:8pt;padding:2px 0;color:#1a1a1a;font-weight:${l==="Quotation #:"?"700":"400"}">${v}</td>
+        </tr>`).join("")}
+      </table>
+    </td>
+  </tr>
+</table>
+<div style="border-top:1px solid #e2e8f0;margin-bottom:10px"></div>
+
+<!-- SALUTATION -->
+${q.attn ? `<div style="margin-bottom:8px"><span style="font-weight:700;font-size:8.5pt">Kind Attn:</span> <span style="font-size:8.5pt">Dear ${q.attn};</span></div>` : ""}
+${q.notes ? `<div style="font-size:8.5pt;color:#444;margin-bottom:10px">${q.notes}</div>` : `<div style="font-size:8.5pt;color:#444;margin-bottom:10px">Thank you for providing us the opportunity to quote. Please find our best prices below.</div>`}
+
+<!-- ITEMS HEADER BAR -->
+<div style="background:#6366f1;color:#fff;font-size:9.5pt;font-weight:700;text-align:center;padding:6px;margin-bottom:0">QUOTATION ITEMS</div>
+
+<!-- ITEMS TABLE -->
+<table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+  <thead>
+    <tr style="background:#1e2030;color:#fff">
+      <th style="padding:6px 5px;text-align:center;border:0.5px solid #4a5568;font-size:7.5pt;width:24px">S/N<br>o</th>
+      <th style="padding:6px 7px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt">Description</th>
+      <th style="padding:6px 5px;text-align:center;border:0.5px solid #4a5568;font-size:7.5pt;width:38px">Qty</th>
+      <th style="padding:6px 5px;text-align:center;border:0.5px solid #4a5568;font-size:7.5pt;width:34px">Unit</th>
+      <th style="padding:6px 5px;text-align:right;border:0.5px solid #4a5568;font-size:7.5pt;width:58px">Unit Price</th>
+      <th style="padding:6px 5px;text-align:right;border:0.5px solid #4a5568;font-size:7.5pt;width:58px">Net Amnt</th>
+      <th style="padding:6px 5px;text-align:right;border:0.5px solid #4a5568;font-size:7.5pt;width:50px">VAT</th>
+      <th style="padding:6px 5px;text-align:right;border:0.5px solid #4a5568;font-size:7.5pt;width:66px">Total Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${itemRows||`<tr><td colspan="8" style="text-align:center;padding:12px;color:#999;font-size:8pt">No items</td></tr>`}
+  </tbody>
+</table>
+
+<!-- TOTALS (right-aligned) -->
+<table style="width:220px;margin-left:auto;border-collapse:collapse;margin-bottom:14px">
+  <tr>
+    <td style="padding:5px 10px;background:#eee;border:0.5px solid #ccc;font-size:8.5pt;font-weight:600">TOTAL NET</td>
+    <td style="padding:5px 10px;background:#eee;border:0.5px solid #ccc;font-size:8.5pt;text-align:right;font-weight:600">${(q.subtotal||0).toFixed(2)}</td>
+  </tr>
+  <tr>
+    <td style="padding:5px 10px;background:#eee;border:0.5px solid #ccc;font-size:8.5pt;font-weight:600">TOTAL VAT</td>
+    <td style="padding:5px 10px;background:#eee;border:0.5px solid #ccc;font-size:8.5pt;text-align:right;font-weight:600">${(q.totalVat||0).toFixed(2)}</td>
+  </tr>
+  <tr style="background:#1b3a5c">
+    <td style="padding:6px 10px;border:0.5px solid #2d4e6e;font-size:8.5pt;font-weight:700;color:#fff">GRAND TOTAL (SAR)</td>
+    <td style="padding:6px 10px;border:0.5px solid #2d4e6e;font-size:8.5pt;font-weight:700;color:#fff;text-align:right">${(q.grandTotal||0).toFixed(2)}</td>
+  </tr>
+</table>
+
+${tcHTML}
+${ptHTML}
+${sigHTML}
+
+<!-- PAGE FOOTER -->
+<div style="margin-top:16px;padding-top:6px;border-top:0.5px solid #e8ecf0;display:flex;justify-content:space-between;font-size:7pt;color:#aaa">
+  <span>${co?.name||""}</span>
+  <span>Page 1 of 1</span>
+  <span>${qNum}</span>
+</div>
+
+<script>
+document.title="${qNum}";
+window.onload=function(){setTimeout(function(){window.print()},1200)};
+</script>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+    const win = window.open(blobUrl, "_blank", "width=960,height=800");
+    if (win) {
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } else {
+      const a = document.createElement("a");
+      a.href = blobUrl; a.download = `${qNum}.html`; a.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     }
-
-    if (ptList.length > 0) {
-      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-      doc.text("Payment Terms:", ML, y); y += 6;
-      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
-      ptList.forEach(t => {
-        const lines = doc.splitTextToSize(`- ${t}`, TW - 4);
-        doc.text(lines, ML, y); y += lines.length * 5;
-      });
-      y += 5;
-    }
-
-    // ── Authorized Signatory + Stamp ────────────────────────────────────────
-    if (selectedSig || (o.stamp && (currentCompany as any)?.stamp)) {
-      if (y + 50 > ph_total - 20) { doc.addPage(); y = o.letterhead ? await addLetterhead(doc) : 15; }
-      y += 4;
-      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-      doc.text("Authorized Signatory:", ML, y); y += 8;
-      if (selectedSig) {
-        if (o.includeSig && (selectedSig as any).signatureUrl) {
-          try { const sb = await loadImageAsBase64((selectedSig as any).signatureUrl); doc.addImage(sb, "PNG", ML, y, 50, 18); y += 20; } catch {}
-        }
-        doc.setDrawColor(150); doc.line(ML, y, ML + 60, y); y += 4;
-        doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(15, 23, 42);
-        doc.text(selectedSig.name, ML, y); y += 5;
-        doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(80);
-        doc.text(selectedSig.designation || "", ML, y);
-      }
-      if (o.stamp && (currentCompany as any)?.stamp) {
-        try { const stb = await loadImageAsBase64((currentCompany as any).stamp); doc.addImage(stb, "PNG", pw - MR - 45, y - 40, 40, 40); } catch {}
-      }
-    }
-
-    const ph = doc.internal.pageSize.getHeight();
-    const total = (doc as any).internal.getNumberOfPages();
-    for (let i = 1; i <= total; i++) { doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150); doc.text(`Page ${i} of ${total}`, pw-14, ph-8, { align: "right" }); doc.text("Safqa — ZATCA Compliant ERP", 14, ph-8); }
-    doc.save(`Quotation-${q.quotationNumber}.pdf`);
   };
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────
   const statusLabel = (s: QuotationStatus) => {
     const map: Record<QuotationStatus, [string,string]> = {
       draft: ["مسودة","Draft"], sent: ["مرسل","Sent"], accepted: ["مقبول","Accepted"],
