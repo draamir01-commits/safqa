@@ -12,6 +12,8 @@ import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { generateZatcaQrHtmlCanvas, generateQRDataURL, encodeTLV } from "../../utils/zatca/qrEncoder";
 import { processPhase1Invoice } from "../../utils/zatca/phase1";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { Invoice, InvoiceStatus, ZatcaStatus } from "../../types";
 
@@ -100,6 +102,260 @@ export const InvoicesPage: React.FC = () => {
     } finally {
       setGeneratingQr(false);
     }
+  };
+
+  // ── Load image as base64 for PDF ─────────────────────────────────────────
+  const loadImgB64 = (url: string): Promise<string> =>
+    new Promise((res, rej) => {
+      if (!url) return rej("no url");
+      if (url.startsWith("data:")) return res(url);
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        c.getContext("2d")!.drawImage(img, 0, 0);
+        res(c.toDataURL("image/png"));
+      };
+      img.onerror = () => rej("load failed");
+      img.src = url;
+    });
+
+  // ── Professional ZATCA Invoice PDF ───────────────────────────────────────
+  const exportInvoicePDF = async (inv: Invoice, qrUrl: string) => {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const pw = doc.internal.pageSize.getWidth();  // 210
+    const ph = doc.internal.pageSize.getHeight(); // 297
+    const ML = 10; const MR = 10; const TW = pw - ML - MR;
+    let y = 8;
+
+    const co = currentCompany as any;
+
+    // ── HEADER: bilingual two-column + logo ──────────────────────────────
+    const hH = 36;
+    // Left col — EN
+    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 20);
+    doc.text(co?.name || "Company", ML, y + 6);
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
+    const leftLines = [
+      co?.address || "",
+      co?.city ? `${co.city}, Kingdom of Saudi Arabia` : "",
+      co?.email || "",
+      co?.phone || "",
+      co?.vatNumber ? `VAT number ${co.vatNumber}` : "",
+      co?.crNumber ? `CR Number ${co.crNumber}` : "",
+    ].filter(Boolean);
+    let ly = y + 11;
+    leftLines.forEach(line => { doc.text(line, ML, ly); ly += 4; });
+
+    // Logo center
+    if (co?.logo) {
+      try {
+        const lb = await loadImgB64(co.logo);
+        doc.addImage(lb, "PNG", pw/2 - 18, y + 2, 36, 28);
+      } catch {}
+    }
+
+    // Right col — AR (right-aligned)
+    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 20);
+    doc.text(co?.nameAr || "", pw - MR, y + 6, { align: "right" });
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
+    const rightLines = [
+      co?.addressAr ? `${co.addressAr}` : "",
+      co?.vatNumber ? `رقم التسجيل الضريبي ${co.vatNumber}` : "",
+      co?.crNumber ? `رقم السجل التجاري ${co.crNumber}` : "",
+    ].filter(Boolean);
+    let ry = y + 11;
+    rightLines.forEach(line => { doc.text(line, pw - MR, ry, { align: "right" }); ry += 4; });
+
+    y += hH;
+    doc.setDrawColor(180); doc.setLineWidth(0.5); doc.line(ML, y, pw - MR, y); y += 5;
+
+    // ── TITLE ─────────────────────────────────────────────────────────────
+    doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 20);
+    const titleEN = inv.type === "simplified" ? "Simplified Tax Invoice" : "Tax Invoice";
+    const titleAR = inv.type === "simplified" ? "فاتورة ضريبية مبسطة" : "فاتورة ضريبية";
+    doc.text(`${titleEN}    ${titleAR}`, pw / 2, y + 6, { align: "center" });
+    y += 12;
+    doc.setDrawColor(180); doc.line(ML, y, pw - MR, y); y += 4;
+
+    // ── INFO GRID (bilingual bordered table) ──────────────────────────────
+    const rows: [string, string, string, string][] = [
+      ["Customer",        inv.customerName || "",                  "العميل",          inv.customerNameAr || inv.customerName || ""],
+      ["Address",         inv.customerAddress || "",               "العنوان",         inv.customerAddress || ""],
+      ["VAT number",      inv.customerVatNumber || "",             "رقم التسجيل الضريبي", inv.customerVatNumber || ""],
+      ["Invoice number",  inv.invoiceNumber || "",                 "رقم الفاتورة",    inv.invoiceNumber || ""],
+      ["Date",            inv.issueDate || "",                     "التاريخ",         inv.issueDate || ""],
+      ["Project",         (inv as any).projectName || "",          "المشروع",         (inv as any).projectName || ""],
+      ["Due date",        inv.dueDate || "",                       "تاريخ الاستحقاق", inv.dueDate || ""],
+    ].filter(r => r[1] || r[3]);
+
+    const rowH = 7; const c1 = ML; const c2 = ML + 28; const c3 = pw/2 + 2; const c4 = pw/2 + 30;
+    const gridW = TW; const halfW = gridW / 2;
+
+    rows.forEach((row, i) => {
+      const ry2 = y + i * rowH;
+      // Borders
+      doc.setDrawColor(200); doc.setLineWidth(0.3);
+      doc.rect(c1, ry2, halfW, rowH);
+      doc.rect(c1 + halfW, ry2, halfW, rowH);
+      // Labels (bold)
+      doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(40);
+      doc.text(row[0], c1 + 1.5, ry2 + 4.5);
+      doc.text(row[2], c1 + halfW + halfW - 1.5, ry2 + 4.5, { align: "right" });
+      // Values (normal)
+      doc.setFont("helvetica", "normal"); doc.setTextColor(20);
+      doc.text(row[1], c2, ry2 + 4.5);
+      doc.text(row[3], c4, ry2 + 4.5);
+    });
+
+    y += rows.length * rowH + 5;
+
+    // ── ITEMS TABLE ───────────────────────────────────────────────────────
+    const items = inv.lineItems || [];
+    const tableBody = items.map((l: any, i: number) => [
+      String(i + 1),
+      `${l.name || ""}
+${l.nameAr || ""}`,
+      `${l.qty}
+${l.unit || "PCE"}`,
+      l.unitPrice?.toFixed(2) || "0.00",
+      (l.lineTotal - l.vatAmount)?.toFixed(2) || "0.00",
+      `${l.vatAmount?.toFixed(2) || "0.00"}
+${l.vatRate}%`,
+      l.lineTotal?.toFixed(2) || "0.00",
+    ]);
+
+    autoTable(doc, {
+      head: [[
+        "#",
+        "Description
+الوصف",
+        "Qty
+الكمية",
+        "Price
+السعر",
+        "Taxable amount
+المبلغ الخاضع للضريبة",
+        "VAT amount
+القيمة المضافة",
+        "Line amount
+المجموع",
+      ]],
+      body: tableBody,
+      startY: y,
+      theme: "grid",
+      headStyles: {
+        fillColor: [240, 240, 240],
+        textColor: [20, 20, 20],
+        fontStyle: "bold",
+        fontSize: 7,
+        halign: "center",
+        valign: "middle",
+        cellPadding: 2,
+        lineColor: [180, 180, 180],
+        lineWidth: 0.3,
+      },
+      bodyStyles: {
+        fontSize: 7.5,
+        textColor: [20, 20, 20],
+        cellPadding: { top: 3, bottom: 3, left: 2, right: 2 },
+        lineColor: [200, 200, 200],
+        lineWidth: 0.3,
+      },
+      alternateRowStyles: { fillColor: [252, 252, 252] },
+      columnStyles: {
+        0: { cellWidth: 8,  halign: "center" },
+        1: { cellWidth: "auto" },
+        2: { cellWidth: 16, halign: "center" },
+        3: { cellWidth: 22, halign: "right" },
+        4: { cellWidth: 28, halign: "right" },
+        5: { cellWidth: 22, halign: "right" },
+        6: { cellWidth: 24, halign: "right", fontStyle: "bold" },
+      },
+      margin: { left: ML, right: MR },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 6;
+
+    // ── BOTTOM: QR left, totals right ─────────────────────────────────────
+    const qrSize = 35;
+    const totalsX = pw - MR - 70;
+    const totalsW = 70;
+
+    // QR code
+    if (qrUrl) {
+      doc.addImage(qrUrl, "PNG", ML, y, qrSize, qrSize);
+      doc.setFontSize(6); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+      doc.text("This QR code is encoded as per ZATCA e-invoicing requirements", ML, y + qrSize + 3, { maxWidth: qrSize + 20 });
+      doc.text("تم ترميز هذا الرمز وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك للفوترة الإلكترونية", ML, y + qrSize + 7, { maxWidth: 70 });
+    }
+
+    // Totals box
+    const totRows = [
+      { labelEN: "Subtotal", labelAR: "المجموع الفرعي",              value: inv.subtotal?.toFixed(2) || "0.00",    bold: false, shade: false },
+      { labelEN: "Total VAT", labelAR: "إجمالي ضريبة القيمة المضافة", value: inv.totalVat?.toFixed(2) || "0.00",   bold: false, shade: false },
+      { labelEN: "Total",     labelAR: "المجموع شامل القيمة المضافة", value: inv.grandTotal?.toFixed(2) || "0.00", bold: true,  shade: true  },
+    ];
+    let ty = y;
+    const trH = 10;
+    totRows.forEach(row => {
+      doc.setDrawColor(180); doc.setLineWidth(0.3);
+      if (row.shade) {
+        doc.setFillColor(240, 240, 240); doc.rect(totalsX, ty, totalsW, trH, "FD");
+      } else {
+        doc.rect(totalsX, ty, totalsW, trH);
+      }
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", row.bold ? "bold" : "normal");
+      doc.setTextColor(20);
+      doc.text(`${row.labelEN} / ${row.labelAR}`, totalsX + 2, ty + 6.5);
+      doc.text(`${row.value} ریال`, totalsX + totalsW - 2, ty + 6.5, { align: "right" });
+      ty += trH;
+    });
+
+    y = Math.max(y + qrSize + 15, ty + 10);
+
+    // ── FOOTER: Signature left, Stamp right ───────────────────────────────
+    if (y + 40 > ph - 15) { doc.addPage(); y = 15; }
+    doc.setDrawColor(180); doc.line(ML, y, pw - MR, y); y += 5;
+
+    // Signature area
+    const signatoryId = (inv as any).signatoryId;
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+    doc.text("Signature", ML, y + 3);
+
+    // Load signature image if available from company signatories
+    // For now draw a placeholder line
+    doc.setDrawColor(100); doc.line(ML, y + 20, ML + 55, y + 20);
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(20);
+    doc.text(co?.signatoryName || "", ML, y + 25);
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
+    doc.text(co?.signatoryTitle || "", ML, y + 30);
+    doc.text("Authorized Signatory / المفوض بالتوقيع", ML, y + 35);
+
+    // Stamp
+    if (co?.stamp) {
+      try {
+        const stb = await loadImgB64(co.stamp);
+        doc.addImage(stb, "PNG", pw - MR - 38, y, 38, 38);
+      } catch {}
+    }
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+    doc.text("Company Stamp / ختم الشركة", pw - MR, y + 40, { align: "right" });
+
+    // ── PAGE FOOTER ────────────────────────────────────────────────────────
+    const totalPages = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(7); doc.setTextColor(120);
+      doc.text(co?.name || "", ML, ph - 6);
+      doc.text(co?.nameAr || "", pw - MR, ph - 6, { align: "right" });
+      doc.text(`Page ${i} of ${totalPages} - ${inv.invoiceNumber}`, pw / 2, ph - 6, { align: "center" });
+      doc.text(inv.invoiceNumber || "", pw - MR, ph - 10, { align: "right" });
+    }
+
+    doc.save(`Invoice-${inv.invoiceNumber}.pdf`);
   };
 
   const handleOpenEdit = (inv: Invoice) => {
@@ -505,9 +761,17 @@ export const InvoicesPage: React.FC = () => {
                   <Pencil className="h-3.5 w-3.5" />
                   {language === "ar" ? "تعديل" : "Edit"}
                 </Button>
+                <Button
+                  variant="secondary" size="sm"
+                  onClick={() => exportInvoicePDF(selectedInvoice, qrDataUrl)}
+                  className="flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  {language === "ar" ? "تصدير PDF" : "Export PDF"}
+                </Button>
                 <Button onClick={handlePrint} variant="success" size="sm" className="flex items-center gap-2 font-bold px-4">
                   <Printer className="h-4 w-4" />
-                  {language === "ar" ? "طباعة الفاتورة والباركود" : "Print PDF / Receipt"}
+                  {language === "ar" ? "طباعة" : "Print"}
                 </Button>
               </div>
             </div>
