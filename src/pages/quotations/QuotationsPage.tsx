@@ -699,15 +699,12 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
 </script>
 </body></html>`;
 
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const blobUrl = URL.createObjectURL(blob);
-    const win = window.open(blobUrl, "_blank", "width=960,height=800");
-    if (win) {
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-    } else {
-      const a = document.createElement("a");
-      a.href = blobUrl; a.download = `${qNum}.html`; a.click();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    // Write directly to pre-opened window (window must be opened before async work to avoid popup blockers)
+    if ((exportQuotationPDF as any)._win && !(exportQuotationPDF as any)._win.closed) {
+      const win = (exportQuotationPDF as any)._win;
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
     }
   };
 
@@ -1393,8 +1390,15 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
               <button
                 onClick={async () => {
                   if (!exportingQuotation) return;
+                  // Open window IMMEDIATELY on click (before any async) to avoid popup blocker
+                  const win = window.open("", "_blank", "width=960,height=800");
+                  if (!win) {
+                    toast.error(language === "ar" ? "يرجى السماح بالنوافذ المنبثقة" : "Please allow popups in your browser settings");
+                    return;
+                  }
+                  win.document.write(`<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;color:#666"><p>Generating quotation PDF...</p></body></html>`);
+                  (exportQuotationPDF as any)._win = win;
                   setGeneratingPdf(true);
-                  // Close modal first so window.open isn't blocked by modal z-index
                   setShowExportModal(false);
                   try {
                     await exportQuotationPDF(exportingQuotation, {
@@ -1402,7 +1406,10 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
                       logo: expLogo, stamp: expStamp,
                       sigId: expSigId, includeSig: expIncludeSig,
                     });
-                  } finally { setGeneratingPdf(false); }
+                  } finally {
+                    setGeneratingPdf(false);
+                    (exportQuotationPDF as any)._win = null;
+                  }
                 }}
                 disabled={generatingPdf}
                 className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-brand-primary text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
