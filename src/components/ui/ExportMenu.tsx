@@ -86,10 +86,16 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
 
   // Branding options
   const [includeLogo, setIncludeLogo]             = React.useState(true);
-  const [includeLetterhead, setIncludeLetterhead] = React.useState(false);
+  // letterheadMode: "none" | "header" | "full"
+  //   none   = no letterhead
+  //   header = header+footer banner images only
+  //   full   = full A4 page background
+  const [letterheadMode, setLetterheadMode] = React.useState<"none"|"header"|"full">("none");
   const [selectedLetterheadId, setSelectedLetterheadId] = React.useState("primary");
   const [includeStamp, setIncludeStamp]           = React.useState(false);
   const [includeSignature, setIncludeSignature]   = React.useState(false);
+  // Keep legacy for compat
+  const includeLetterhead = letterheadMode !== "none";
 
   // Data
   const [signatories, setSignatories]   = React.useState<AuthorizedSignatory[]>([]);
@@ -215,96 +221,179 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
   const exportPDF = async () => {
     setGenerating(true);
     try {
-      const doc = new jsPDF();
-      const pw = doc.internal.pageSize.getWidth();
-      const ph = doc.internal.pageSize.getHeight();
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      const pw = doc.internal.pageSize.getWidth();   // 210mm
+      const ph = doc.internal.pageSize.getHeight();  // 297mm
+      const ML = 14; const MR = 14;                  // left/right margin
       const selectedSig = signatories.find(s => s.id === selectedSigId);
-      let y = 15;
 
-      // ── LETTERHEAD ──────────────────────────────────────────────────────────
-      // Safe content margins (same as TechBridge)
-      const SAFE_HEADER_MARGIN = 48;
-      const SAFE_FOOTER_MARGIN = 35;
-      let isFullPage = false;
-      let lhImgB64 = "";
+      // ── Per-mode constants ─────────────────────────────────────────────────
+      // FULL  : background image fills entire A4, content inside safe zone
+      // HEADER: banner image at top (≤50mm), optional footer banner at bottom (≤25mm)
+      // NONE  : just company text header
+      const FULL_TOP    = 48;   // mm — content starts below letterhead header branding
+      const FULL_BOTTOM = 28;   // mm — content ends above letterhead footer branding
+      const MAX_HEADER_BANNER = 50;  // mm max height for header banner
+      const MAX_FOOTER_BANNER = 25;  // mm max height for footer banner
 
-      if (includeLetterhead) {
-        const selectedLH = letterheads.find(l => l.id === selectedLetterheadId);
-        if (selectedLH && selectedLH.url) {
-          try {
-            lhImgB64 = await loadImageAsBase64(selectedLH.url);
-            // Detect if full-page letterhead (A4 ratio: height/width > 1.15)
-            const tmpImg = new window.Image();
-            await new Promise<void>(res => { tmpImg.onload = () => res(); tmpImg.onerror = () => res(); tmpImg.src = lhImgB64; });
-            const ratio = tmpImg.naturalHeight / tmpImg.naturalWidth;
-            isFullPage = ratio > 1.15;
+      // Resolved at runtime after images load
+      let lhB64       = "";   // full-page or header banner base64
+      let footerB64   = "";   // footer banner base64
+      let headerH     = 0;    // actual rendered header height in mm
+      let footerH     = 0;    // actual rendered footer height in mm
+      const isFullMode   = letterheadMode === "full";
+      const isHeaderMode = letterheadMode === "header";
 
-            if (isFullPage) {
-              // Full-page background — draw on first page
-              doc.addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
-              y = SAFE_HEADER_MARGIN;
-              // Monkey-patch addPage so letterhead redraws on every new page
-              const origAddPage = doc.addPage.bind(doc);
-              (doc as any).addPage = function() {
-                const result = origAddPage.apply(this, arguments as any);
-                (this as any).addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
-                return result;
-              };
-            } else {
-              // Partial header image (banner-style)
-              const imgH = pw * (tmpImg.naturalHeight / tmpImg.naturalWidth);
-              doc.addImage(lhImgB64, "PNG", 0, 0, pw, imgH, undefined, "FAST");
-              y = imgH + 6;
-            }
-          } catch { /* fallback to text header below */ }
-        }
+      // Helper — get pixel dimensions of a base64 image
+      const imgPx = (b64: string) => new Promise<{w:number;h:number}>(res => {
+        const img = new window.Image();
+        img.onload  = () => res({ w: img.naturalWidth  || 1, h: img.naturalHeight || 1 });
+        img.onerror = () => res({ w: 1, h: 1 });
+        img.src = b64;
+      });
 
-        // Fallback text header (when no image or image load failed)
-        if (y === 15) {
-          doc.setFillColor(15, 23, 42);
-          doc.rect(0, 0, pw, 28, "F");
-          if (includeLogo && (currentCompany as any)?.logo) {
-            try {
-              const logoB64 = await loadImageAsBase64((currentCompany as any).logo);
-              doc.addImage(logoB64, "PNG", 8, 4, 20, 20);
-            } catch {}
-          }
-          doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
-          doc.text(currentCompany?.name || "Report", includeLogo ? 32 : 14, 13);
-          doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(180);
-          doc.text(
-            [currentCompany?.vatNumber ? `VAT: ${currentCompany.vatNumber}` : "", currentCompany?.city || "", currentCompany?.phone || ""].filter(Boolean).join("   "),
-            includeLogo ? 32 : 14, 22
-          );
-          y = 36;
-        }
-      } else {
-        // Simple text header
-        if (includeLogo && (currentCompany as any)?.logo) {
-          try {
-            const logoB64 = await loadImageAsBase64((currentCompany as any).logo);
-            doc.addImage(logoB64, "PNG", 14, y - 5, 18, 18);
-            doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-            doc.text(currentCompany?.name || "Report", 36, y + 4);
-            y += 16;
-          } catch {
-            doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-            doc.text(currentCompany?.name || "Report", 14, y); y += 8;
-          }
-        } else {
-          doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-          doc.text(currentCompany?.name || "Report", 14, y); y += 8;
-        }
-        if (currentCompany?.vatNumber) {
-          doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-          doc.text(`VAT: ${currentCompany.vatNumber}  |  CR: ${currentCompany.crNumber || ""}  |  ${currentCompany.city || ""}`, 14, y); y += 5;
-        }
-        doc.setFontSize(9); doc.setTextColor(100);
-        doc.text(`${sanitize(filename).replace(/_/g, " ").toUpperCase()}   |   ${new Date().toLocaleDateString()}`, 14, y); y += 3;
-        doc.setDrawColor(200); doc.line(14, y + 1, pw - 14, y + 1); y += 8;
+      // ── Step 1: pre-load images ────────────────────────────────────────────
+      const selectedLH = letterheads.find(l => l.id === selectedLetterheadId);
+      if (letterheadMode !== "none" && selectedLH?.url) {
+        try { lhB64 = await loadImageAsBase64(selectedLH.url); } catch {}
+      }
+      if (isHeaderMode) {
+        const fUrl = (currentCompany as any).footerAsset || (currentCompany as any).letterheadFooter;
+        if (fUrl) try { footerB64 = await loadImageAsBase64(fUrl); } catch {}
+      }
+      let logoB64 = "";
+      if (includeLogo && (currentCompany as any)?.logo) {
+        try { logoB64 = await loadImageAsBase64((currentCompany as any).logo); } catch {}
+      }
+      let stampB64 = "";
+      if (includeStamp && (currentCompany as any)?.stamp) {
+        try { stampB64 = await loadImageAsBase64((currentCompany as any).stamp); } catch {}
+      }
+      let sigB64 = "";
+      if (includeSignature && (selectedSig as any)?.signatureUrl) {
+        try { sigB64 = await loadImageAsBase64((selectedSig as any).signatureUrl); } catch {}
       }
 
-      // ── TABLE SECTIONS ──────────────────────────────────────────────────────
+      // ── Step 2: calculate actual image heights ─────────────────────────────
+      if (lhB64) {
+        const { w, h } = await imgPx(lhB64);
+        if (isFullMode) {
+          // Full page: always render at full A4 size
+          headerH = ph;
+        } else {
+          // Header banner: scale width to page width, cap height
+          headerH = Math.min(Math.round((h / w) * pw), MAX_HEADER_BANNER);
+        }
+      }
+      if (footerB64) {
+        const { w, h } = await imgPx(footerB64);
+        footerH = Math.min(Math.round((h / w) * pw), MAX_FOOTER_BANNER);
+      }
+
+      // ── Step 3: compute content margins ───────────────────────────────────
+      // topMargin  = where content (tables) START
+      // botMargin  = how much space to RESERVE at bottom for footer
+      let topMargin: number;
+      let botMargin: number;
+
+      if (isFullMode) {
+        topMargin = FULL_TOP;
+        botMargin = FULL_BOTTOM;
+      } else if (isHeaderMode) {
+        topMargin = headerH > 0 ? headerH + 5 : 36;
+        botMargin = footerH > 0 ? footerH + 6 : 15;
+      } else {
+        topMargin = 15;
+        botMargin = 15;
+      }
+
+      // ── Step 4: draw page function (background layer) ─────────────────────
+      const drawPageBg = (pageDoc: typeof doc) => {
+        if (isFullMode && lhB64) {
+          pageDoc.addImage(lhB64, "JPEG", 0, 0, pw, ph, undefined, "FAST");
+        } else if (isHeaderMode) {
+          if (lhB64 && headerH > 0) {
+            pageDoc.addImage(lhB64, "JPEG", 0, 0, pw, headerH, undefined, "FAST");
+          }
+          if (footerB64 && footerH > 0) {
+            pageDoc.addImage(footerB64, "JPEG", 0, ph - footerH, pw, footerH, undefined, "FAST");
+          }
+        }
+      };
+
+      // ── Step 5: draw foreground clips (branding on top of tables) ─────────
+      const drawPageFg = (pageDoc: typeof doc) => {
+        if (isFullMode && lhB64) {
+          // Clip & redraw header region
+          try {
+            pageDoc.saveGraphicsState();
+            pageDoc.rect(0, 0, pw, FULL_TOP - 2).clip();
+            pageDoc.addImage(lhB64, "JPEG", 0, 0, pw, ph, undefined, "FAST");
+            pageDoc.restoreGraphicsState();
+          } catch {}
+          // Clip & redraw footer region
+          try {
+            pageDoc.saveGraphicsState();
+            pageDoc.rect(0, ph - FULL_BOTTOM, pw, FULL_BOTTOM).clip();
+            pageDoc.addImage(lhB64, "JPEG", 0, 0, pw, ph, undefined, "FAST");
+            pageDoc.restoreGraphicsState();
+          } catch {}
+        } else if (isHeaderMode) {
+          if (lhB64 && headerH > 0) {
+            try {
+              pageDoc.saveGraphicsState();
+              pageDoc.rect(0, 0, pw, headerH).clip();
+              pageDoc.addImage(lhB64, "JPEG", 0, 0, pw, headerH, undefined, "FAST");
+              pageDoc.restoreGraphicsState();
+            } catch {}
+          }
+          if (footerB64 && footerH > 0) {
+            try {
+              pageDoc.saveGraphicsState();
+              pageDoc.rect(0, ph - footerH, pw, footerH).clip();
+              pageDoc.addImage(footerB64, "JPEG", 0, ph - footerH, pw, footerH, undefined, "FAST");
+              pageDoc.restoreGraphicsState();
+            } catch {}
+          }
+        }
+      };
+
+      // ── Step 6: first page setup ───────────────────────────────────────────
+      drawPageBg(doc);
+
+      // Monkey-patch addPage so background auto-redraws on every new page
+      const _origAddPage = doc.addPage.bind(doc);
+      (doc as any).addPage = function() {
+        const r = _origAddPage.apply(this, arguments as any);
+        drawPageBg(this as typeof doc);
+        return r;
+      };
+
+      let y = topMargin;
+
+      // ── Step 7: company text header (none mode or fallback) ────────────────
+      if (letterheadMode === "none") {
+        if (logoB64) {
+          doc.addImage(logoB64, "JPEG", ML, y - 4, 16, 16);
+          doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+          doc.text(currentCompany?.name || "", ML + 20, y + 4);
+          y += 14;
+        } else {
+          doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
+          doc.text(currentCompany?.name || "", ML, y + 4); y += 10;
+        }
+        if (currentCompany?.vatNumber) {
+          doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
+          doc.text(`VAT: ${currentCompany.vatNumber}  |  CR: ${currentCompany.crNumber || ""}  |  ${currentCompany.city || ""}`, ML, y);
+          y += 5;
+        }
+        doc.setFontSize(8); doc.setTextColor(120);
+        doc.text(`${sanitize(filename).replace(/_/g, " ").toUpperCase()}   |   ${new Date().toLocaleDateString()}`, ML, y);
+        y += 2;
+        doc.setDrawColor(220); doc.line(ML, y + 2, pw - MR, y + 2); y += 7;
+      }
+
+      // ── Step 8: table sections ─────────────────────────────────────────────
       const sections = getSections();
       sections.forEach(sec => {
         if (!sec.data.length) return;
@@ -314,8 +403,9 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
           return keys.map(k => String(flat[k] ?? ""));
         });
 
+        // Section title bar
         doc.setFillColor(15, 23, 42);
-        doc.rect(14, y, pw - 28, 8, "F");
+        doc.rect(ML, y, pw - ML - MR, 8, "F");
         doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(255);
         doc.text(sec.title.toUpperCase(), pw / 2, y + 5.5, { align: "center" });
         y += 10;
@@ -327,71 +417,73 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
           theme: "grid",
           headStyles: { fillColor: [29, 78, 216], textColor: 255, fontStyle: "bold", fontSize: 7 },
           alternateRowStyles: { fillColor: [245, 247, 250] },
-          styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
-          margin: { top: isFullPage ? SAFE_HEADER_MARGIN : 15, bottom: isFullPage ? SAFE_FOOTER_MARGIN : (selectedSig ? 50 : 30) },
-          didDrawPage: () => {
-            // Redraw full-page letterhead on top on new pages (foreground clips)
-            if (isFullPage && lhImgB64) {
-              try {
-                doc.saveGraphicsState();
-                doc.rect(0, 0, pw, SAFE_HEADER_MARGIN - 4).clip();
-                doc.addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
-                doc.restoreGraphicsState();
-                doc.saveGraphicsState();
-                doc.rect(0, ph - SAFE_FOOTER_MARGIN + 2, pw, SAFE_FOOTER_MARGIN - 2).clip();
-                doc.addImage(lhImgB64, "PNG", 0, 0, pw, ph, undefined, "FAST");
-                doc.restoreGraphicsState();
-              } catch {}
-            }
-          },
+          styles: { fontSize: 7, cellPadding: 2.5, overflow: "linebreak" },
+          // top/bottom margins prevent table from drawing over letterhead
+          margin: { left: ML, right: MR, top: topMargin, bottom: botMargin + 10 },
           rowPageBreak: "avoid",
+          didDrawPage: (data) => {
+            // On continuation pages redraw foreground branding on top of the table
+            if (data.pageNumber > 1) drawPageFg(doc);
+          },
         });
+
         y = (doc as any).lastAutoTable.finalY + 8;
       });
 
-      // ── SIGNATORY + STAMP ───────────────────────────────────────────────────
+      // ── Step 9: signatory + stamp ──────────────────────────────────────────
       if (selectedSig || includeStamp) {
-        if (y + 50 > ph - 20) { doc.addPage(); y = 20; }
-        doc.setDrawColor(200); doc.line(14, y, pw - 14, y); y += 8;
+        // Ensure enough space — if not, add page
+        const needH = 50;
+        const maxY = ph - botMargin - needH;
+        if (y > maxY) { doc.addPage(); y = topMargin; }
+
+        doc.setDrawColor(200); doc.setLineWidth(0.3);
+        doc.line(ML, y, pw - MR, y); y += 8;
 
         if (selectedSig) {
-          // Signature image if available
-          if (includeSignature && (selectedSig as any).signatureUrl) {
-            try {
-              const sigB64 = await loadImageAsBase64((selectedSig as any).signatureUrl);
-              doc.addImage(sigB64, "PNG", 14, y, 50, 18);
-              y += 20;
-            } catch {}
+          // Signature image above the line
+          if (sigB64) {
+            doc.addImage(sigB64, "JPEG", ML, y, 45, 16);
+            y += 18;
           }
-          doc.setDrawColor(150); doc.line(14, y + 2, 70, y + 2);
+          doc.setDrawColor(140); doc.line(ML, y, ML + 60, y); y += 4;
           doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(15, 23, 42);
-          doc.text(selectedSig.name, 14, y + 8);
+          doc.text(selectedSig.name, ML, y + 4);
           doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-          doc.text(selectedSig.designation || "", 14, y + 13);
-          doc.setFontSize(7); doc.setTextColor(150);
-          doc.text(language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory", 14, y + 18);
+          doc.text(selectedSig.designation || "", ML, y + 9);
+          doc.setFontSize(7); doc.setTextColor(140);
+          doc.text(language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory", ML, y + 14);
         }
 
-        if (includeStamp && (currentCompany as any)?.stamp) {
-          try {
-            const stampB64 = await loadImageAsBase64((currentCompany as any).stamp);
-            doc.addImage(stampB64, "PNG", pw - 55, y - 5, 40, 40);
-          } catch {}
+        if (stampB64) {
+          // Stamp on right side, vertically centred with signatory block
+          const stampSize = 38;
+          const stampY = selectedSig ? y - (sigB64 ? 18 : 0) - 4 : y - 4;
+          doc.addImage(stampB64, "JPEG", pw - MR - stampSize, stampY, stampSize, stampSize);
         }
       }
 
-      // ── PAGE NUMBERS ────────────────────────────────────────────────────────
+      // ── Step 10: page numbers + final foreground pass ──────────────────────
       const total = (doc as any).internal.getNumberOfPages();
-      for (let i = 1; i <= total; i++) {
-        doc.setPage(i);
-        doc.setFontSize(7); doc.setTextColor(150);
-        doc.text(`Page ${i} of ${total}`, pw - 14, ph - 8, { align: "right" });
-        doc.text("Safqa — ZATCA Compliant ERP", 14, ph - 8);
+      for (let p = 1; p <= total; p++) {
+        doc.setPage(p);
+        // Redraw foreground branding on top of everything on every page
+        drawPageFg(doc);
+        // Page number — positioned inside the safe footer area
+        const numY = isFullMode
+          ? ph - FULL_BOTTOM + 6
+          : footerH > 0
+            ? ph - footerH - 2
+            : ph - 6;
+        doc.setFontSize(7);
+        doc.setTextColor(isFullMode ? 200 : 130);
+        doc.text(`Page ${p} of ${total}`, pw - MR, numY, { align: "right" });
+        doc.text("Safqa — ZATCA Compliant ERP", ML, numY);
       }
 
       doc.save(`${sanitize(filename)}.pdf`);
       setOpen(false);
-    } catch (e) { console.error("PDF export failed", e); alert("PDF generation failed."); }
+    } catch (e) { console.error("PDF export failed", e); alert("PDF generation failed. Check console for details."); }
     finally { setGenerating(false); }
   };
 
@@ -524,7 +616,8 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
               {(includeLetterhead || includeLogo || includeStamp || selectedSigId) && (
                 <div className="bg-slate-900 rounded-xl p-3 text-[10px] text-slate-400 space-y-1">
                   <p className="font-bold text-white text-xs mb-2">{language === "ar" ? "سيحتوي الملف على:" : "PDF will include:"}</p>
-                  {includeLetterhead && <p>✓ {letterheads.find(l => l.id === selectedLetterheadId)?.name || "Letterhead"}</p>}
+                  {letterheadMode === "full" && <p>✓ {language === "ar" ? "ترويسة صفحة كاملة" : "Full page letterhead"} — {letterheads.find(l => l.id === selectedLetterheadId)?.name || "Primary"}</p>}
+                  {letterheadMode === "header" && <p>✓ {language === "ar" ? "رأس وتذييل" : "Header + footer"} — {letterheads.find(l => l.id === selectedLetterheadId)?.name || "Primary"}</p>}
                   {includeLogo && (currentCompany as any)?.logo && <p>✓ {language === "ar" ? "شعار الشركة" : "Company logo"}</p>}
                   {includeStamp && (currentCompany as any)?.stamp && <p>✓ {language === "ar" ? "الختم الرسمي" : "Company stamp"}</p>}
                   {selectedSig && <p>✓ {selectedSig.name} — {selectedSig.designation}</p>}
