@@ -344,7 +344,7 @@ export const ClientStatementPage: React.FC = () => {
           if (el) { window.print(); }
         }}
         title={selectedClient ? `${language === "ar" ? "كشف حساب" : "Client Statement"} — ${selectedClient.name}` : "Client Statement"}
-        itemCount={clientInvoices.length}
+        itemCount={clientInvoices?.length}
       />
     </div>
   );
