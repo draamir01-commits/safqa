@@ -327,20 +327,34 @@ export const InvoicesPage: React.FC = () => {
     <span>${inv.invoiceNumber}</span>
   </div>
 
-  <script>
-    window.onload = function() {
-      setTimeout(function() { window.print(); }, 600);
-    };
-  </script>
 </body>
 </html>`;
 
-    const win = window.open("", "_blank", "width=900,height=750");
+    // Use blob URL so browser saves with the invoice number as filename
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const win = window.open(blobUrl, "_blank", "width=900,height=750");
     if (win) {
-      win.document.write(html);
-      win.document.close();
+      // Set the document title so "Save as PDF" uses the invoice number
+      win.addEventListener("load", () => {
+        try {
+          win.document.title = inv.invoiceNumber || "Invoice";
+          setTimeout(() => {
+            win.print();
+            // Clean up blob URL after a delay
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+          }, 600);
+        } catch {}
+      });
     } else {
-      toast.error(language === "ar" ? "يرجى السماح بالنوافذ المنبثقة لتصدير PDF" : "Please allow popups to export PDF");
+      // Fallback: direct download as HTML (user can open and print)
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${inv.invoiceNumber}.html`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+      toast.success(language === "ar" ? "تم تنزيل الفاتورة" : `Invoice downloaded as ${inv.invoiceNumber}.html — open it and print to PDF`);
     }
   };
 
