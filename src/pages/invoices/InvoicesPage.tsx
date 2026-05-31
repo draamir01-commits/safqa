@@ -229,18 +229,12 @@ ${l.vatRate}%`,
     autoTable(doc, {
       head: [[
         "#",
-        "Description
-الوصف",
-        "Qty
-الكمية",
-        "Price
-السعر",
-        "Taxable amount
-المبلغ الخاضع للضريبة",
-        "VAT amount
-القيمة المضافة",
-        "Line amount
-المجموع",
+        "Description / الوصف",
+        "Qty / الكمية",
+        "Price / السعر",
+        "Taxable Amount / المبلغ الخاضع",
+        "VAT Amount / الضريبة",
+        "Line Amount / المجموع",
       ]],
       body: tableBody,
       startY: y,
