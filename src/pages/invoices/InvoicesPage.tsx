@@ -103,21 +103,61 @@ export const InvoicesPage: React.FC = () => {
   };
 
   // ── Load image as base64 for PDF ─────────────────────────────────────────
-  const loadImgB64 = (url: string): Promise<string> =>
-    new Promise((res, rej) => {
-      if (!url) return rej("no url");
-      if (url.startsWith("data:")) return res(url);
-      const img = new window.Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const c = document.createElement("canvas");
-        c.width = img.width; c.height = img.height;
-        c.getContext("2d")!.drawImage(img, 0, 0);
-        res(c.toDataURL("image/png"));
-      };
-      img.onerror = () => rej("load failed");
-      img.src = url;
-    });
+  // ── Robust image loader: cache → fetch+CORS → white canvas composite ──
+  const loadImgB64 = async (url: string): Promise<string> => {
+    if (!url) throw new Error("No URL");
+    if (url.startsWith("data:")) return url;
+
+    const cacheKey = "img_cache_" + btoa(url.slice(0, 100)).replace(/[^a-z0-9]/gi, "");
+    try {
+      // 1. Check localStorage cache
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) return cached;
+
+      // 2. Fetch with CORS (works for Firebase Storage URLs)
+      let dataUrl = url;
+      try {
+        const resp = await fetch(url, { mode: "cors", credentials: "omit" });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          dataUrl = await new Promise<string>((res, rej) => {
+            const reader = new FileReader();
+            reader.onloadend = () => res(reader.result as string);
+            reader.onerror = rej;
+            reader.readAsDataURL(blob);
+          });
+          try { localStorage.setItem(cacheKey, dataUrl); } catch {}
+        }
+      } catch { /* fallback to direct img load */ }
+
+      // 3. Load via Image element
+      const rawImg = await new Promise<HTMLImageElement>((res, rej) => {
+        const img = new window.Image();
+        if (dataUrl.startsWith("http")) img.crossOrigin = "anonymous";
+        img.onload = () => res(img);
+        img.onerror = () => rej(new Error("load failed"));
+        img.src = dataUrl;
+      });
+
+      // 4. Composite on white canvas (fixes transparency + black square bug)
+      const canvas = document.createElement("canvas");
+      canvas.width = rawImg.naturalWidth || rawImg.width || 200;
+      canvas.height = rawImg.naturalHeight || rawImg.height || 200;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (ctx && canvas.width > 0 && canvas.height > 0) {
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(rawImg, 0, 0);
+        const composited = canvas.toDataURL("image/jpeg", 0.95);
+        try { localStorage.setItem(cacheKey, composited); } catch {}
+        return composited;
+      }
+      return dataUrl;
+    } catch (err) {
+      console.error("[loadImgB64] failed:", err);
+      throw err;
+    }
+  };
 
   // ── Professional ZATCA Invoice PDF — TechBridge layout ─────────────────
   const exportInvoicePDF = async (inv: Invoice, qrUrl: string) => {
