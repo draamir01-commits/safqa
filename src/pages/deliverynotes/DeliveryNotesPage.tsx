@@ -273,7 +273,7 @@ export const DeliveryNotesPage: React.FC = () => {
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
         title={language === "ar" ? "سندات التسليم" : "Delivery Notes"}
-        itemCount={deliveryNotes?.length}
+        itemCount={notes?.length}
       />
     </div>
   );
