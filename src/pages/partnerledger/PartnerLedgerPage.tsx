@@ -175,7 +175,7 @@ export const PartnerLedgerPage: React.FC = () => {
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
         title={language === "ar" ? "دفتر أستاذ الشركاء" : "Partner Ledger"}
-        itemCount={entries?.length}
+        itemCount={invoices?.length}
       />
     </div>
   );
