@@ -330,7 +330,7 @@ export const JournalEntriesPage: React.FC = () => {
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
         title={language === "ar" ? "القيود اليومية" : "Journal Entries"}
-        itemCount={entries?.length}
+        itemCount={journals?.length}
       />
     </div>
   );
