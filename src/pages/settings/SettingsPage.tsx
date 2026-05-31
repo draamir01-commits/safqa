@@ -111,6 +111,8 @@ export const SettingsPage: React.FC = () => {
 
   // Additional letterheads
   const [additionalLetterheads, setAdditionalLetterheads] = React.useState<{ id: string; name: string; url: string }[]>([]);
+  const [fullLetterhead, setFullLetterhead] = React.useState("");
+  const fullLHFileRef = React.useRef<HTMLInputElement>(null);
   const [newLHName, setNewLHName] = React.useState("");
   const [newLHUrl, setNewLHUrl] = React.useState("");
   const [footerAssetUrl, setFooterAssetUrl] = React.useState("");
@@ -166,6 +168,7 @@ export const SettingsPage: React.FC = () => {
     setFiscalYearStart(currentCompany.fiscalYearStart || "01-01");
     setAdditionalLetterheads((currentCompany as any).additionalLetterheads || []);
     setFooterAssetUrl((currentCompany as any).footerAsset || "");
+    setFullLetterhead((currentCompany as any).fullLetterhead || "");
     setEquityPartners((currentCompany as any).equityPartners || []);
     setStampUrl((currentCompany as any).stamp || "");
     setLogoUrl((currentCompany as any).logo || "");
@@ -245,6 +248,7 @@ export const SettingsPage: React.FC = () => {
       await updateCompany(currentCompany.id, {
         additionalLetterheads,
         footerAsset: footerAssetUrl,
+        fullLetterhead,
       } as any);
       toast.success(language === "ar" ? "تم حفظ الترويسات" : "Letterheads saved");
     } catch (err: any) { toast.error(err.message); }
@@ -598,6 +602,68 @@ export const SettingsPage: React.FC = () => {
           {/* ── Letterheads ── */}
           {activeTab === "letterheads" && (
             <div className="space-y-5">
+              {/* ── Primary Full Page Letterhead ── */}
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-brand-primary" />
+                    {language === "ar" ? "الترويسة الرئيسية (صفحة كاملة A4)" : "Primary Letterhead (Full Page A4)"}
+                  </h3>
+                  {fullLetterhead && (
+                    <button onClick={() => setFullLetterhead("")} className="text-xs text-red-500 hover:underline flex items-center gap-1">
+                      <X className="h-3 w-3" />
+                      {language === "ar" ? "إزالة" : "Remove"}
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  {language === "ar"
+                    ? "صورة بحجم A4 كامل تُستخدم كخلفية لجميع صفحات المستند المصدَّر. الحجم الموصى به: 2480×3508 بكسل (A4 بدقة 300)"
+                    : "A full A4-size image used as background on all pages of the exported document. Recommended: 2480×3508px (A4 at 300dpi) or 794×1123px (96dpi)"}
+                </p>
+
+                <div
+                  onClick={() => fullLHFileRef.current?.click()}
+                  className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors min-h-[140px] relative overflow-hidden"
+                >
+                  {fullLetterhead ? (
+                    <div className="flex flex-col items-center gap-2 w-full">
+                      <img src={fullLetterhead} alt="Primary Letterhead" className="max-h-40 object-contain rounded border border-slate-200 shadow-sm" />
+                      <p className="text-xs text-emerald-600 font-semibold">✓ {language === "ar" ? "تم رفع الترويسة الرئيسية" : "Primary letterhead uploaded"}</p>
+                      <p className="text-[10px] text-slate-400">{language === "ar" ? "انقر لتغييرها" : "Click to change"}</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-slate-400">
+                      <Upload className="h-8 w-8 opacity-30" />
+                      <p className="text-sm font-semibold">{language === "ar" ? "انقر لرفع الترويسة الرئيسية" : "Click to upload primary letterhead"}</p>
+                      <p className="text-xs">{language === "ar" ? "PNG أو JPG — صفحة كاملة A4" : "PNG or JPG — Full A4 page"}</p>
+                    </div>
+                  )}
+                  <input
+                    ref={fullLHFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const b64 = await fileToBase64(file);
+                      setFullLetterhead(b64);
+                      if (fullLHFileRef.current) fullLHFileRef.current.value = "";
+                    }}
+                  />
+                </div>
+
+                {fullLetterhead && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 space-y-1">
+                    <p className="font-semibold">{language === "ar" ? "كيف تُطبَّق الترويسة الرئيسية:" : "How the primary letterhead is applied:"}</p>
+                    <p>• {language === "ar" ? "تُرسم كخلفية كاملة على كل صفحة في الملف المصدَّر" : "Drawn as full-page background on every page of exported files"}</p>
+                    <p>• {language === "ar" ? "يبدأ المحتوى بعد 48mm من الأعلى (منطقة آمنة)" : "Content starts 48mm from top to avoid overlapping header area"}</p>
+                    <p>• {language === "ar" ? "تظهر كخيار «الترويسة الرئيسية» في لوحة التصدير" : "Appears as «Primary Letterhead» option in the export panel"}</p>
+                  </div>
+                )}
+              </div>
+
               <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
                   <FileText className="h-5 w-5 text-brand-primary" />
