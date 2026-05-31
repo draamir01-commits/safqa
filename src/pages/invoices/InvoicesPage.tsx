@@ -12,8 +12,6 @@ import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { generateZatcaQrHtmlCanvas, generateQRDataURL, encodeTLV } from "../../utils/zatca/qrEncoder";
 import { processPhase1Invoice } from "../../utils/zatca/phase1";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { Invoice, InvoiceStatus, ZatcaStatus } from "../../types";
 
@@ -121,235 +119,229 @@ export const InvoicesPage: React.FC = () => {
       img.src = url;
     });
 
-  // ── Professional ZATCA Invoice PDF ───────────────────────────────────────
+  // ── Professional ZATCA Invoice PDF (HTML-based for Arabic support) ────────
   const exportInvoicePDF = async (inv: Invoice, qrUrl: string) => {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const pw = doc.internal.pageSize.getWidth();  // 210
-    const ph = doc.internal.pageSize.getHeight(); // 297
-    const ML = 10; const MR = 10; const TW = pw - ML - MR;
-    let y = 8;
-
     const co = currentCompany as any;
+    const dir = "ltr";
 
-    // ── HEADER: bilingual two-column + logo ──────────────────────────────
-    const hH = 36;
-    // Left col — EN
-    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 20);
-    doc.text(co?.name || "Company", ML, y + 6);
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
-    const leftLines = [
-      co?.address || "",
-      co?.city ? `${co.city}, Kingdom of Saudi Arabia` : "",
-      co?.email || "",
-      co?.phone || "",
-      co?.vatNumber ? `VAT number ${co.vatNumber}` : "",
-      co?.crNumber ? `CR Number ${co.crNumber}` : "",
-    ].filter(Boolean);
-    let ly = y + 11;
-    leftLines.forEach(line => { doc.text(line, ML, ly); ly += 4; });
+    const row = (labelEN: string, valueEN: string, labelAR: string, valueAR: string) =>
+      `<tr>
+        <td class="label-en">${labelEN}</td>
+        <td class="value-en">${valueEN || ""}</td>
+        <td class="label-ar">${labelAR}</td>
+        <td class="value-ar">${valueAR || ""}</td>
+      </tr>`;
 
-    // Logo center
-    if (co?.logo) {
-      try {
-        const lb = await loadImgB64(co.logo);
-        doc.addImage(lb, "PNG", pw/2 - 18, y + 2, 36, 28);
-      } catch {}
-    }
-
-    // Right col — AR (right-aligned)
-    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 20);
-    doc.text(co?.nameAr || "", pw - MR, y + 6, { align: "right" });
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
-    const rightLines = [
-      co?.addressAr ? `${co.addressAr}` : "",
-      co?.vatNumber ? `رقم التسجيل الضريبي ${co.vatNumber}` : "",
-      co?.crNumber ? `رقم السجل التجاري ${co.crNumber}` : "",
-    ].filter(Boolean);
-    let ry = y + 11;
-    rightLines.forEach(line => { doc.text(line, pw - MR, ry, { align: "right" }); ry += 4; });
-
-    y += hH;
-    doc.setDrawColor(180); doc.setLineWidth(0.5); doc.line(ML, y, pw - MR, y); y += 5;
-
-    // ── TITLE ─────────────────────────────────────────────────────────────
-    doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 20);
     const titleEN = inv.type === "simplified" ? "Simplified Tax Invoice" : "Tax Invoice";
     const titleAR = inv.type === "simplified" ? "فاتورة ضريبية مبسطة" : "فاتورة ضريبية";
-    doc.text(`${titleEN}    ${titleAR}`, pw / 2, y + 6, { align: "center" });
-    y += 12;
-    doc.setDrawColor(180); doc.line(ML, y, pw - MR, y); y += 4;
 
-    // ── INFO GRID (bilingual bordered table) ──────────────────────────────
-    const rows: [string, string, string, string][] = [
-      ["Customer",        inv.customerName || "",                  "العميل",          inv.customerNameAr || inv.customerName || ""],
-      ["Address",         inv.customerAddress || "",               "العنوان",         inv.customerAddress || ""],
-      ["VAT number",      inv.customerVatNumber || "",             "رقم التسجيل الضريبي", inv.customerVatNumber || ""],
-      ["Invoice number",  inv.invoiceNumber || "",                 "رقم الفاتورة",    inv.invoiceNumber || ""],
-      ["Date",            inv.issueDate || "",                     "التاريخ",         inv.issueDate || ""],
-      ["Project",         (inv as any).projectName || "",          "المشروع",         (inv as any).projectName || ""],
-      ["Due date",        inv.dueDate || "",                       "تاريخ الاستحقاق", inv.dueDate || ""],
-    ].filter(r => r[1] || r[3]);
+    const lineRows = (inv.lineItems || []).map((l: any, i: number) => `
+      <tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td>${l.name || ""}<br/><span class="ar">${l.nameAr || ""}</span></td>
+        <td style="text-align:center">${l.qty}<br/>${l.unit || "PCE"}</td>
+        <td style="text-align:right">${(l.unitPrice || 0).toFixed(2)}</td>
+        <td style="text-align:right">${((l.lineTotal || 0) - (l.vatAmount || 0)).toFixed(2)}</td>
+        <td style="text-align:right">${(l.vatAmount || 0).toFixed(2)}<br/>${l.vatRate || 15}%</td>
+        <td style="text-align:right;font-weight:700">${(l.lineTotal || 0).toFixed(2)}</td>
+      </tr>`).join("");
 
-    const rowH = 7; const c1 = ML; const c2 = ML + 28; const c3 = pw/2 + 2; const c4 = pw/2 + 30;
-    const gridW = TW; const halfW = gridW / 2;
+    const html = `<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${inv.invoiceNumber}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Inter','Cairo',Arial,sans-serif;font-size:9pt;color:#1e293b;background:#fff;padding:12mm;}
+    .ar{font-family:'Cairo',Arial,sans-serif;direction:rtl;unicode-bidi:bidi-override;}
 
-    rows.forEach((row, i) => {
-      const ry2 = y + i * rowH;
-      // Borders
-      doc.setDrawColor(200); doc.setLineWidth(0.3);
-      doc.rect(c1, ry2, halfW, rowH);
-      doc.rect(c1 + halfW, ry2, halfW, rowH);
-      // Labels (bold)
-      doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(40);
-      doc.text(row[0], c1 + 1.5, ry2 + 4.5);
-      doc.text(row[2], c1 + halfW + halfW - 1.5, ry2 + 4.5, { align: "right" });
-      // Values (normal)
-      doc.setFont("helvetica", "normal"); doc.setTextColor(20);
-      doc.text(row[1], c2, ry2 + 4.5);
-      doc.text(row[3], c4, ry2 + 4.5);
-    });
+    /* Header */
+    .header{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:start;padding-bottom:8px;border-bottom:1.5px solid #cbd5e1;margin-bottom:8px;}
+    .header-left{font-size:8pt;line-height:1.6;}
+    .header-left .company-name{font-size:11pt;font-weight:700;margin-bottom:3px;}
+    .header-right{font-size:8pt;line-height:1.6;text-align:right;direction:rtl;}
+    .header-right .company-name-ar{font-family:'Cairo',Arial,sans-serif;font-size:11pt;font-weight:700;margin-bottom:3px;}
+    .logo-wrap{display:flex;align-items:center;justify-content:center;}
+    .logo-wrap img{max-height:55px;max-width:100px;object-fit:contain;}
+    .logo-placeholder{width:55px;height:55px;background:#1d4ed8;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18pt;font-weight:700;}
 
-    y += rows.length * rowH + 5;
+    /* Title */
+    .title-row{text-align:center;font-size:18pt;font-weight:800;margin:6px 0;letter-spacing:1px;}
+    .title-row .ar{font-size:16pt;}
+    .divider{border:none;border-top:1.5px solid #cbd5e1;margin:6px 0;}
 
-    // ── ITEMS TABLE ───────────────────────────────────────────────────────
-    const items = inv.lineItems || [];
-    const tableBody = items.map((l: any, i: number) => [
-      String(i + 1),
-      `${l.name || ""}
-${l.nameAr || ""}`,
-      `${l.qty}
-${l.unit || "PCE"}`,
-      l.unitPrice?.toFixed(2) || "0.00",
-      (l.lineTotal - l.vatAmount)?.toFixed(2) || "0.00",
-      `${l.vatAmount?.toFixed(2) || "0.00"}
-${l.vatRate}%`,
-      l.lineTotal?.toFixed(2) || "0.00",
-    ]);
+    /* Info grid */
+    .info-table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8.5pt;}
+    .info-table td{border:0.5px solid #cbd5e1;padding:4px 6px;vertical-align:middle;}
+    .info-table .label-en{font-weight:700;width:90px;color:#374151;}
+    .info-table .value-en{width:35%;color:#1e293b;}
+    .info-table .label-ar{font-family:'Cairo',Arial,sans-serif;font-weight:700;width:90px;color:#374151;text-align:right;direction:rtl;}
+    .info-table .value-ar{font-family:'Cairo',Arial,sans-serif;text-align:right;direction:rtl;color:#1e293b;}
 
-    autoTable(doc, {
-      head: [[
-        "#",
-        "Description / الوصف",
-        "Qty / الكمية",
-        "Price / السعر",
-        "Taxable Amount / المبلغ الخاضع",
-        "VAT Amount / الضريبة",
-        "Line Amount / المجموع",
-      ]],
-      body: tableBody,
-      startY: y,
-      theme: "grid",
-      headStyles: {
-        fillColor: [240, 240, 240],
-        textColor: [20, 20, 20],
-        fontStyle: "bold",
-        fontSize: 7,
-        halign: "center",
-        valign: "middle",
-        cellPadding: 2,
-        lineColor: [180, 180, 180],
-        lineWidth: 0.3,
-      },
-      bodyStyles: {
-        fontSize: 7.5,
-        textColor: [20, 20, 20],
-        cellPadding: { top: 3, bottom: 3, left: 2, right: 2 },
-        lineColor: [200, 200, 200],
-        lineWidth: 0.3,
-      },
-      alternateRowStyles: { fillColor: [252, 252, 252] },
-      columnStyles: {
-        0: { cellWidth: 8,  halign: "center" },
-        1: { cellWidth: "auto" },
-        2: { cellWidth: 16, halign: "center" },
-        3: { cellWidth: 22, halign: "right" },
-        4: { cellWidth: 28, halign: "right" },
-        5: { cellWidth: 22, halign: "right" },
-        6: { cellWidth: 24, halign: "right", fontStyle: "bold" },
-      },
-      margin: { left: ML, right: MR },
-    });
+    /* Items table */
+    .items-table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8.5pt;}
+    .items-table th{background:#f1f5f9;border:0.5px solid #cbd5e1;padding:5px 6px;font-weight:700;text-align:center;vertical-align:middle;line-height:1.4;}
+    .items-table th .ar{font-size:7.5pt;display:block;margin-top:1px;}
+    .items-table td{border:0.5px solid #e2e8f0;padding:5px 6px;vertical-align:middle;}
+    .items-table tr:nth-child(even) td{background:#f8fafc;}
 
-    y = (doc as any).lastAutoTable.finalY + 6;
+    /* Bottom section */
+    .bottom-section{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;margin-top:10px;}
+    .qr-block{display:flex;flex-direction:column;gap:4px;}
+    .qr-block img{width:90px;height:90px;border:0.5px solid #e2e8f0;}
+    .qr-note{font-size:6.5pt;color:#64748b;max-width:160px;line-height:1.4;}
+    .qr-note .ar{font-size:6.5pt;display:block;margin-top:2px;}
 
-    // ── BOTTOM: QR left, totals right ─────────────────────────────────────
-    const qrSize = 35;
-    const totalsX = pw - MR - 70;
-    const totalsW = 70;
+    /* Totals */
+    .totals-table{width:100%;border-collapse:collapse;font-size:8.5pt;margin-left:auto;}
+    .totals-table td{border:0.5px solid #cbd5e1;padding:5px 8px;}
+    .totals-table .tot-label{font-weight:600;}
+    .totals-table .tot-label .ar{font-family:'Cairo',Arial,sans-serif;font-size:7.5pt;display:block;margin-top:1px;direction:rtl;}
+    .totals-table .tot-val{text-align:right;font-weight:600;}
+    .totals-table .grand td{background:#1e293b;color:#fff;font-weight:700;}
 
-    // QR code
-    if (qrUrl) {
-      doc.addImage(qrUrl, "PNG", ML, y, qrSize, qrSize);
-      doc.setFontSize(6); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-      doc.text("This QR code is encoded as per ZATCA e-invoicing requirements", ML, y + qrSize + 3, { maxWidth: qrSize + 20 });
-      doc.text("تم ترميز هذا الرمز وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك للفوترة الإلكترونية", ML, y + qrSize + 7, { maxWidth: 70 });
+    /* Footer */
+    .footer-section{margin-top:14px;padding-top:8px;border-top:1px solid #cbd5e1;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+    .sig-block{display:flex;flex-direction:column;gap:4px;}
+    .sig-line{border-bottom:1px solid #64748b;width:160px;margin-top:30px;margin-bottom:4px;}
+    .sig-name{font-weight:700;font-size:9pt;}
+    .sig-title{font-size:8pt;color:#64748b;}
+    .sig-label{font-size:7.5pt;color:#94a3b8;}
+    .sig-label .ar{font-family:'Cairo',Arial,sans-serif;}
+    .stamp-block{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+    .stamp-block img{max-width:90px;max-height:90px;object-fit:contain;}
+    .stamp-label{font-size:7.5pt;color:#94a3b8;text-align:right;}
+    .stamp-label .ar{font-family:'Cairo',Arial,sans-serif;}
+
+    /* Page footer */
+    .page-footer{margin-top:12px;padding-top:6px;border-top:0.5px solid #e2e8f0;display:flex;justify-content:space-between;font-size:7pt;color:#94a3b8;}
+    .page-footer .ar{font-family:'Cairo',Arial,sans-serif;}
+
+    @media print{
+      body{padding:8mm;}
+      @page{size:A4;margin:8mm;}
+      .no-print{display:none!important;}
     }
+  </style>
+</head>
+<body>
 
-    // Totals box
-    const totRows = [
-      { labelEN: "Subtotal", labelAR: "المجموع الفرعي",              value: inv.subtotal?.toFixed(2) || "0.00",    bold: false, shade: false },
-      { labelEN: "Total VAT", labelAR: "إجمالي ضريبة القيمة المضافة", value: inv.totalVat?.toFixed(2) || "0.00",   bold: false, shade: false },
-      { labelEN: "Total",     labelAR: "المجموع شامل القيمة المضافة", value: inv.grandTotal?.toFixed(2) || "0.00", bold: true,  shade: true  },
-    ];
-    let ty = y;
-    const trH = 10;
-    totRows.forEach(row => {
-      doc.setDrawColor(180); doc.setLineWidth(0.3);
-      if (row.shade) {
-        doc.setFillColor(240, 240, 240); doc.rect(totalsX, ty, totalsW, trH, "FD");
-      } else {
-        doc.rect(totalsX, ty, totalsW, trH);
-      }
-      doc.setFontSize(7.5);
-      doc.setFont("helvetica", row.bold ? "bold" : "normal");
-      doc.setTextColor(20);
-      doc.text(`${row.labelEN} / ${row.labelAR}`, totalsX + 2, ty + 6.5);
-      doc.text(`${row.value} ریال`, totalsX + totalsW - 2, ty + 6.5, { align: "right" });
-      ty += trH;
-    });
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="company-name">${co?.name || ""}</div>
+      ${[co?.address, co?.city ? co.city + ", Kingdom of Saudi Arabia" : "", co?.email, co?.phone, co?.vatNumber ? "VAT number " + co.vatNumber : "", co?.crNumber ? "CR Number " + co.crNumber : ""].filter(Boolean).map(l => `<div>${l}</div>`).join("")}
+    </div>
+    <div class="logo-wrap">
+      ${co?.logo ? `<img src="${co.logo}" alt="logo"/>` : `<div class="logo-placeholder">${(co?.nameAr || co?.name || "S")[0]}</div>`}
+    </div>
+    <div class="header-right">
+      <div class="company-name-ar ar">${co?.nameAr || ""}</div>
+      ${[co?.addressAr, co?.vatNumber ? "رقم التسجيل الضريبي " + co.vatNumber : "", co?.crNumber ? "رقم السجل التجاري " + co.crNumber : ""].filter(Boolean).map(l => `<div class="ar">${l}</div>`).join("")}
+    </div>
+  </div>
 
-    y = Math.max(y + qrSize + 15, ty + 10);
+  <!-- TITLE -->
+  <div class="title-row">
+    ${titleEN} &nbsp;&nbsp; <span class="ar">${titleAR}</span>
+  </div>
+  <hr class="divider"/>
 
-    // ── FOOTER: Signature left, Stamp right ───────────────────────────────
-    if (y + 40 > ph - 15) { doc.addPage(); y = 15; }
-    doc.setDrawColor(180); doc.line(ML, y, pw - MR, y); y += 5;
+  <!-- INFO GRID -->
+  <table class="info-table">
+    ${row("Customer", inv.customerName || "", "العميل", inv.customerNameAr || inv.customerName || "")}
+    ${inv.customerAddress ? row("Address", inv.customerAddress, "العنوان", inv.customerAddress) : ""}
+    ${inv.customerVatNumber ? row("VAT number", inv.customerVatNumber, "رقم التسجيل الضريبي", inv.customerVatNumber) : ""}
+    ${row("Invoice number", inv.invoiceNumber || "", "رقم الفاتورة", inv.invoiceNumber || "")}
+    ${row("Date", inv.issueDate || "", "التاريخ", inv.issueDate || "")}
+    ${(inv as any).projectName ? row("Project", (inv as any).projectName, "المشروع", (inv as any).projectName) : ""}
+    ${inv.dueDate ? row("Due date", inv.dueDate, "تاريخ الاستحقاق", inv.dueDate) : ""}
+  </table>
 
-    // Signature area
-    const signatoryId = (inv as any).signatoryId;
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-    doc.text("Signature", ML, y + 3);
+  <!-- ITEMS TABLE -->
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width:24px">#</th>
+        <th>Description<span class="ar">الوصف</span></th>
+        <th style="width:46px">Qty<span class="ar">الكمية</span></th>
+        <th style="width:60px">Price<span class="ar">السعر</span></th>
+        <th style="width:74px">Taxable Amount<span class="ar">المبلغ الخاضع</span></th>
+        <th style="width:64px">VAT Amount<span class="ar">القيمة المضافة</span></th>
+        <th style="width:70px">Line Amount<span class="ar">المجموع</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${lineRows}
+    </tbody>
+  </table>
 
-    // Load signature image if available from company signatories
-    // For now draw a placeholder line
-    doc.setDrawColor(100); doc.line(ML, y + 20, ML + 55, y + 20);
-    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(20);
-    doc.text(co?.signatoryName || "", ML, y + 25);
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(60);
-    doc.text(co?.signatoryTitle || "", ML, y + 30);
-    doc.text("Authorized Signatory / المفوض بالتوقيع", ML, y + 35);
+  <!-- BOTTOM: QR + TOTALS -->
+  <div class="bottom-section">
+    <div class="qr-block">
+      ${qrUrl ? `<img src="${qrUrl}" alt="ZATCA QR"/>` : ""}
+      <div class="qr-note">
+        This QR code is encoded as per ZATCA e-invoicing requirements
+        <span class="ar">تم ترميز هذا الرمز وفقاً لمتطلبات هيئة الزكاة والضريبة والجمارك للفوترة الإلكترونية</span>
+      </div>
+    </div>
+    <div>
+      <table class="totals-table">
+        <tr>
+          <td class="tot-label">Subtotal <span class="ar">المجموع الفرعي</span></td>
+          <td class="tot-val">${(inv.subtotal || 0).toFixed(2)} ریال</td>
+        </tr>
+        <tr>
+          <td class="tot-label">Total VAT <span class="ar">إجمالي ضريبة القيمة المضافة</span></td>
+          <td class="tot-val">${(inv.totalVat || 0).toFixed(2)} ریال</td>
+        </tr>
+        <tr class="grand">
+          <td class="tot-label">Total <span class="ar">المجموع شامل القيمة المضافة</span></td>
+          <td class="tot-val">${(inv.grandTotal || 0).toFixed(2)} ریال</td>
+        </tr>
+      </table>
+    </div>
+  </div>
 
-    // Stamp
-    if (co?.stamp) {
-      try {
-        const stb = await loadImgB64(co.stamp);
-        doc.addImage(stb, "PNG", pw - MR - 38, y, 38, 38);
-      } catch {}
+  <!-- FOOTER: SIGNATORY + STAMP -->
+  <div class="footer-section">
+    <div class="sig-block">
+      <div style="font-size:8pt;color:#64748b">Signature</div>
+      <div class="sig-line"></div>
+      <div class="sig-name">${co?.signatoryName || ""}</div>
+      <div class="sig-title">${co?.signatoryTitle || ""}</div>
+      <div class="sig-label">Authorized Signatory / <span class="ar">المفوض بالتوقيع</span></div>
+    </div>
+    <div class="stamp-block">
+      ${co?.stamp ? `<img src="${co.stamp}" alt="stamp"/>` : ""}
+      <div class="stamp-label">Company Stamp / <span class="ar">ختم الشركة</span></div>
+    </div>
+  </div>
+
+  <!-- PAGE FOOTER -->
+  <div class="page-footer">
+    <span>${co?.name || ""} <span class="ar">${co?.nameAr || ""}</span></span>
+    <span>Page 1 of 1 - ${inv.invoiceNumber}</span>
+    <span>${inv.invoiceNumber}</span>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 600);
+    };
+  </script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank", "width=900,height=750");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    } else {
+      toast.error(language === "ar" ? "يرجى السماح بالنوافذ المنبثقة لتصدير PDF" : "Please allow popups to export PDF");
     }
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-    doc.text("Company Stamp / ختم الشركة", pw - MR, y + 40, { align: "right" });
-
-    // ── PAGE FOOTER ────────────────────────────────────────────────────────
-    const totalPages = (doc as any).internal.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFontSize(7); doc.setTextColor(120);
-      doc.text(co?.name || "", ML, ph - 6);
-      doc.text(co?.nameAr || "", pw - MR, ph - 6, { align: "right" });
-      doc.text(`Page ${i} of ${totalPages} - ${inv.invoiceNumber}`, pw / 2, ph - 6, { align: "center" });
-      doc.text(inv.invoiceNumber || "", pw - MR, ph - 10, { align: "right" });
-    }
-
-    doc.save(`Invoice-${inv.invoiceNumber}.pdf`);
   };
 
   const handleOpenEdit = (inv: Invoice) => {
