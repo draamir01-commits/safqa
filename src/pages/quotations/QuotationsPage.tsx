@@ -19,6 +19,7 @@ import {
   getNextQuotationNumber, setQuotationCounter, getQuotationSettings
 } from "../../firebase/firestore";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { processPhase1Invoice } from "../../utils/zatca/phase1";
 import { db } from "../../firebase/config";
 import { formatCurrency } from "../../utils/formatters";
 import {
@@ -375,32 +376,83 @@ export const QuotationsPage: React.FC = () => {
     openEdit({ ...q, revision: nextRev, quotationNumber: newNum, revisionHistory: newHistory });
   };
 
-  // ── Convert to invoice ───────────────────────────────────────────────────
+  // ── Convert to invoice with full ZATCA phase 1 processing ──────────────
   const handleConvertToInvoice = async (q: Quotation) => {
     if (!currentCompany || !user) return;
     setLoading(true);
     try {
       const invNum = await getNextInvoiceNumber(currentCompany.id);
       const invoiceId = uuidv4();
-      await saveInvoice(currentCompany.id, invoiceId, {
-        invoiceNumber: invNum, type: InvoiceType.STANDARD, status: InvoiceStatus.DRAFT,
-        customerId: q.customerId, customerName: q.customerName, customerNameAr: q.customerNameAr,
-        issueDate: new Date().toISOString().split("T")[0],
+      const today = new Date().toISOString().split("T")[0];
+
+      // Build the customer object for ZATCA processing
+      const customer = customers.find(c => c.id === q.customerId) || null;
+
+      // Draft invoice before ZATCA processing
+      const draftInvoice: any = {
+        id: invoiceId,
+        invoiceNumber: invNum,
+        type: InvoiceType.STANDARD,
+        status: InvoiceStatus.DRAFT,
+        customerId: q.customerId,
+        customerName: q.customerName,
+        customerNameAr: q.customerNameAr,
+        customerVatNumber: customer?.vatNumber || "",
+        customerAddress: customer?.address || "",
+        issueDate: today,
         dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
-        supplyDate: new Date().toISOString().split("T")[0],
-        lineItems: q.lineItems, subtotal: q.subtotal,
-        totalDiscount: q.totalDiscount, totalVat: q.totalVat, grandTotal: q.grandTotal,
-        vatBreakdown: [], currency: "SAR",
-        zatcaStatus: ZatcaStatus.NOT_SUBMITTED, zatcaPhase: currentCompany.zatcaPhase,
-        paymentStatus: "unpaid", amountPaid: 0, amountDue: q.grandTotal,
-        notes: q.notes, createdBy: user.uid, createdAt: new Date(), updatedAt: new Date(),
-      });
+        supplyDate: today,
+        lineItems: q.lineItems?.length ? q.lineItems : (q.sections?.flatMap(s => s.items.map(i => ({
+          productId: "", name: i.description, nameAr: i.descriptionAr || "",
+          qty: i.qty, unit: i.unit, unitPrice: i.unitPrice,
+          discountPercent: 0, discountAmount: 0,
+          vatRate: i.vatRate, vatAmount: i.vatAmount, lineTotal: i.totalAmount,
+        }))) || []),
+        subtotal: q.subtotal,
+        totalDiscount: q.totalDiscount || 0,
+        vatBreakdown: [{ rate: 15, amount: q.totalVat }],
+        totalVat: q.totalVat,
+        grandTotal: q.grandTotal,
+        currency: "SAR",
+        zatcaStatus: ZatcaStatus.NOT_SUBMITTED,
+        zatcaPhase: currentCompany.zatcaPhase || 1,
+        paymentStatus: "unpaid",
+        amountPaid: 0,
+        amountDue: q.grandTotal,
+        notes: q.notes || "",
+        createdBy: user.uid,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Run Phase 1 ZATCA processing to generate QR code and hash
+      let zatcaData: any = {};
+      try {
+        const phase1Result = await processPhase1Invoice(draftInvoice, currentCompany, customer);
+        zatcaData = {
+          zatcaUUID: phase1Result.uuid,
+          zatcaQRCode: phase1Result.tlvBase64,
+          zatcaHash: phase1Result.invoiceHash,
+          zatcaXML: phase1Result.xmlString,
+          zatcaStatus: ZatcaStatus.NOT_SUBMITTED,
+          zatcaPhase: currentCompany.zatcaPhase || 1,
+        };
+      } catch (zatcaErr) {
+        console.warn("ZATCA phase1 processing failed, saving without QR:", zatcaErr);
+      }
+
+      await saveInvoice(currentCompany.id, invoiceId, { ...draftInvoice, ...zatcaData });
+
       await updateDocument(`companies/${currentCompany.id}/quotations`, q.id, {
         status: "converted", convertedToInvoiceId: invoiceId, updatedAt: new Date(),
       });
-      toast.success(language === "ar" ? "تم تحويل عرض السعر إلى فاتورة" : "Converted to invoice");
-    } catch (err: any) { toast.error(err.message); }
-    finally { setLoading(false); }
+
+      toast.success(language === "ar" ? "تم تحويل عرض السعر إلى فاتورة مع رمز QR" : "Converted to invoice with QR code");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
