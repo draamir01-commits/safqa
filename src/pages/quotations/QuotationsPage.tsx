@@ -502,7 +502,8 @@ export const QuotationsPage: React.FC = () => {
           itemRows += `<tr style="background:${bg}">
             <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${idx+1}</td>
             <td style="padding:5px 7px;border:0.5px solid #cbd5e0;font-size:8pt">${item.description||""}</td>
-            <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${item.qty||1}<br><span style="font-size:7pt;color:#666">${item.unit||"PCE"}</span></td>
+            <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${item.qty||1}</td>
+            <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${item.unit||"PCE"}</td>
             <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(item.unitPrice||0).toFixed(2)}</td>
             <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(item.amount||0).toFixed(2)}</td>
             <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(item.vatAmount||0).toFixed(2)}</td>
@@ -518,7 +519,8 @@ export const QuotationsPage: React.FC = () => {
         itemRows += `<tr style="background:${bg}">
           <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${idx+1}</td>
           <td style="padding:5px 7px;border:0.5px solid #cbd5e0;font-size:8pt">${l.name||""}</td>
-          <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${l.qty||1}<br><span style="font-size:7pt;color:#666">${l.unit||"PCE"}</span></td>
+          <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${l.qty||1}</td>
+          <td style="text-align:center;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${l.unit||"PCE"}</td>
           <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(l.unitPrice||0).toFixed(2)}</td>
           <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${net.toFixed(2)}</td>
           <td style="text-align:right;padding:5px;border:0.5px solid #cbd5e0;font-size:8pt">${(l.vatAmount||0).toFixed(2)}</td>
