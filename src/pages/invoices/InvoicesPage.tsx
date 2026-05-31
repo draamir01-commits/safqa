@@ -10,7 +10,8 @@ import { useAuthStore } from "../../stores/authStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
 import { listenCompanyCollection, updateDocument, deleteDocument } from "../../firebase/firestore";
-import { generateZatcaQrHtmlCanvas } from "../../utils/zatca/qrEncoder";
+import { generateZatcaQrHtmlCanvas, generateQRDataURL, encodeTLV } from "../../utils/zatca/qrEncoder";
+import { processPhase1Invoice } from "../../utils/zatca/phase1";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { Invoice, InvoiceStatus, ZatcaStatus } from "../../types";
 
@@ -32,6 +33,8 @@ export const InvoicesPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [showPrint, setShowPrint] = React.useState(false);
+  const [qrDataUrl, setQrDataUrl] = React.useState<string>("");
+  const [generatingQr, setGeneratingQr] = React.useState(false);
 
   // Edit modal state
   const [editOpen, setEditOpen] = React.useState(false);
@@ -63,9 +66,40 @@ export const InvoicesPage: React.FC = () => {
     return unsubscribe;
   }, [currentCompany]);
 
-  const handleOpenPreview = (inv: Invoice) => {
+  const handleOpenPreview = async (inv: Invoice) => {
     setSelectedInvoice(inv);
+    setQrDataUrl("");
     setPreviewOpen(true);
+    setGeneratingQr(true);
+    try {
+      if (inv.zatcaQRCode) {
+        // Already has TLV base64 — generate QR image from it
+        const url = await generateQRDataURL(inv.zatcaQRCode);
+        setQrDataUrl(url);
+      } else if (currentCompany) {
+        // Missing QR (e.g. converted from quotation without phase1) — generate now
+        const tlv = encodeTLV(
+          currentCompany.nameAr || currentCompany.name,
+          currentCompany.vatNumber || "",
+          inv.issueDate ? new Date(inv.issueDate).toISOString() : new Date().toISOString(),
+          String(inv.grandTotal),
+          String(inv.totalVat)
+        );
+        const url = await generateQRDataURL(tlv);
+        setQrDataUrl(url);
+        // Save the generated QR back to Firestore so it persists
+        if (inv.id) {
+          updateDocument(`companies/${currentCompany.id}/invoices`, inv.id, {
+            zatcaQRCode: tlv,
+            updatedAt: new Date(),
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.error("QR generation failed:", e);
+    } finally {
+      setGeneratingQr(false);
+    }
   };
 
   const handleOpenEdit = (inv: Invoice) => {
@@ -454,17 +488,20 @@ export const InvoicesPage: React.FC = () => {
                   
                   {/* Dynamic ZATCA QR block with generated TLV byte parsing */}
                   <div className="flex flex-col items-center justify-center p-3 border border-slate-150 rounded-lg bg-slate-50 max-w-[200px] gap-2">
-                    {selectedInvoice.zatcaQRCode ? (
+                    {generatingQr ? (
+                      <div className="h-32 w-32 bg-slate-50 flex items-center justify-center border border-dashed border-slate-300 rounded-sm">
+                        <div className="flex flex-col items-center gap-1 text-slate-400">
+                          <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4" strokeDashoffset="10" /></svg>
+                          <span className="text-[9px]">Generating...</span>
+                        </div>
+                      </div>
+                    ) : qrDataUrl ? (
                       <div className="h-32 w-32 bg-white p-1 rounded-sm border border-slate-200">
-                        <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(selectedInvoice.zatcaQRCode)}`}
-                          alt="ZATCA compliant QR barcode"
-                          className="h-full w-full object-contain"
-                        />
+                        <img src={qrDataUrl} alt="ZATCA QR Code" className="h-full w-full object-contain" />
                       </div>
                     ) : (
                       <div className="h-32 w-32 bg-slate-100 flex items-center justify-center border text-slate-400 text-xs text-center border-dashed border-slate-300">
-                        QR Code missing / unavailable
+                        QR Code unavailable
                       </div>
                     )}
                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wide text-center">
