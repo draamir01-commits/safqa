@@ -279,7 +279,7 @@ export const PurchaseOrdersPage: React.FC = () => {
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
         title={language === "ar" ? "أوامر الشراء" : "Purchase Orders"}
-        itemCount={purchaseOrders?.length}
+        itemCount={orders?.length}
       />
     </div>
   );
