@@ -2,18 +2,21 @@ import * as React from "react";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus, Eye, Printer, ShieldAlert, Sparkles, AlertCircle, FileSpreadsheet, Printer } from "lucide-react";
+import { Plus, Eye, Printer, ShieldAlert, Sparkles, AlertCircle, FileSpreadsheet, Pencil, Trash2, X, CheckCircle, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
+import { useAuthStore } from "../../stores/authStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
-import { listenCompanyCollection } from "../../firebase/firestore";
+import { listenCompanyCollection, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { generateZatcaQrHtmlCanvas } from "../../utils/zatca/qrEncoder";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { Invoice, InvoiceStatus, ZatcaStatus } from "../../types";
 
 import Button from "../../components/ui/Button";
+import Input from "../../components/ui/Input";
+import Select from "../../components/ui/Select";
 import StatusBadge from "../../components/ui/StatusBadge";
 import Modal from "../../components/ui/Modal";
 import DataTable, { Column } from "../../components/ui/DataTable";
@@ -24,10 +27,30 @@ export const InvoicesPage: React.FC = () => {
   const { currentCompany } = useCompanyStore();
   const { language } = useUIStore();
 
+  const { user } = useAuthStore();
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [showPrint, setShowPrint] = React.useState(false);
+
+  // Edit modal state
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editingInvoice, setEditingInvoice] = React.useState<Invoice | null>(null);
+  const [editSaving, setEditSaving] = React.useState(false);
+  // Edit form fields
+  const [editIssueDate, setEditIssueDate] = React.useState("");
+  const [editDueDate, setEditDueDate] = React.useState("");
+  const [editSupplyDate, setEditSupplyDate] = React.useState("");
+  const [editStatus, setEditStatus] = React.useState("");
+  const [editPaymentStatus, setEditPaymentStatus] = React.useState("");
+  const [editAmountPaid, setEditAmountPaid] = React.useState("");
+  const [editNotes, setEditNotes] = React.useState("");
+  const [editNotesAr, setEditNotesAr] = React.useState("");
+  const [editCustomerName, setEditCustomerName] = React.useState("");
+  const [editCustomerNameAr, setEditCustomerNameAr] = React.useState("");
+  const [editCustomerVat, setEditCustomerVat] = React.useState("");
+  // Edit line items
+  const [editLines, setEditLines] = React.useState<any[]>([]);
 
   // Set up realtime sync listen
   React.useEffect(() => {
@@ -43,6 +66,88 @@ export const InvoicesPage: React.FC = () => {
   const handleOpenPreview = (inv: Invoice) => {
     setSelectedInvoice(inv);
     setPreviewOpen(true);
+  };
+
+  const handleOpenEdit = (inv: Invoice) => {
+    setEditingInvoice(inv);
+    setEditIssueDate(inv.issueDate || "");
+    setEditDueDate(inv.dueDate || "");
+    setEditSupplyDate(inv.supplyDate || inv.issueDate || "");
+    setEditStatus(inv.status || "draft");
+    setEditPaymentStatus(inv.paymentStatus || "unpaid");
+    setEditAmountPaid(String(inv.amountPaid || 0));
+    setEditNotes(inv.notes || "");
+    setEditNotesAr(inv.notesAr || "");
+    setEditCustomerName(inv.customerName || "");
+    setEditCustomerNameAr(inv.customerNameAr || "");
+    setEditCustomerVat(inv.customerVatNumber || "");
+    setEditLines(inv.lineItems ? inv.lineItems.map(l => ({ ...l })) : []);
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingInvoice || !currentCompany) return;
+    setEditSaving(true);
+    try {
+      // Recalculate totals from edited lines
+      let subtotal = 0, totalVat = 0, totalDiscount = 0;
+      const recalcLines = editLines.map(l => {
+        const lineNet = l.qty * l.unitPrice;
+        const disc = l.discountAmount || 0;
+        const net = lineNet - disc;
+        const vat = Math.round(net * (l.vatRate / 100) * 100) / 100;
+        const total = Math.round((net + vat) * 100) / 100;
+        subtotal += net;
+        totalVat += vat;
+        totalDiscount += disc;
+        return { ...l, vatAmount: vat, lineTotal: total };
+      });
+      const grandTotal = Math.round((subtotal + totalVat - totalDiscount) * 100) / 100;
+      const amountPaidNum = parseFloat(editAmountPaid) || 0;
+
+      await updateDocument(`companies/${currentCompany.id}/invoices`, editingInvoice.id, {
+        issueDate: editIssueDate,
+        dueDate: editDueDate,
+        supplyDate: editSupplyDate,
+        status: editStatus,
+        paymentStatus: editPaymentStatus,
+        amountPaid: amountPaidNum,
+        amountDue: Math.max(0, grandTotal - amountPaidNum),
+        notes: editNotes,
+        notesAr: editNotesAr,
+        customerName: editCustomerName,
+        customerNameAr: editCustomerNameAr,
+        customerVatNumber: editCustomerVat,
+        lineItems: recalcLines,
+        subtotal: Math.round(subtotal * 100) / 100,
+        totalVat: Math.round(totalVat * 100) / 100,
+        totalDiscount: Math.round(totalDiscount * 100) / 100,
+        grandTotal,
+        updatedAt: new Date(),
+      });
+      toast.success(language === "ar" ? "تم تحديث الفاتورة" : "Invoice updated successfully");
+      setEditOpen(false);
+      setEditingInvoice(null);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteInvoice = async (inv: Invoice) => {
+    if (!currentCompany || !window.confirm(language === "ar" ? "هل أنت متأكد من حذف هذه الفاتورة؟" : "Delete this invoice permanently?")) return;
+    try {
+      await deleteDocument(`companies/${currentCompany.id}/invoices`, inv.id);
+      toast.success(language === "ar" ? "تم حذف الفاتورة" : "Invoice deleted");
+      if (previewOpen && selectedInvoice?.id === inv.id) setPreviewOpen(false);
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const updateEditLine = (idx: number, field: string, value: any) => {
+    setEditLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l));
   };
 
   const handlePrint = () => {
@@ -153,10 +258,26 @@ export const InvoicesPage: React.FC = () => {
     {
       header: t("common.actions"),
       render: (row) => (
-        <Button variant="secondary" size="sm" onClick={() => handleOpenPreview(row)} className="p-1 px-2 flex items-center gap-1.5 hover:border-brand-primary">
-          <Eye className="h-3.5 w-3.5 text-slate-500" />
-          <span className="text-xs">{language === "ar" ? "معاينة الفاتورة" : "Preview"}</span>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="secondary" size="sm" onClick={() => handleOpenPreview(row)} className="p-1 px-2 flex items-center gap-1.5 hover:border-brand-primary">
+            <Eye className="h-3.5 w-3.5 text-slate-500" />
+            <span className="text-xs">{language === "ar" ? "معاينة" : "View"}</span>
+          </Button>
+          <button
+            onClick={() => handleOpenEdit(row)}
+            className="p-1.5 text-slate-400 hover:text-brand-primary hover:bg-blue-50 rounded-lg transition-colors"
+            title={language === "ar" ? "تعديل" : "Edit"}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => handleDeleteInvoice(row)}
+            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            title={language === "ar" ? "حذف" : "Delete"}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )
     }
   ];
@@ -208,10 +329,16 @@ export const InvoicesPage: React.FC = () => {
                 <StatusBadge status={selectedInvoice.status} />
                 <span className="text-xs text-slate-400">UUID: {selectedInvoice.zatcaUUID?.substring(0, 8)}...</span>
               </div>
-              <Button onClick={handlePrint} variant="success" size="sm" className="flex items-center gap-2 font-bold px-4">
-                <Printer className="h-4 w-4" />
-                {language === "ar" ? "طباعة الفاتورة والباركود" : "Print PDF / Receipt"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => { setPreviewOpen(false); handleOpenEdit(selectedInvoice); }} className="flex items-center gap-2">
+                  <Pencil className="h-3.5 w-3.5" />
+                  {language === "ar" ? "تعديل" : "Edit"}
+                </Button>
+                <Button onClick={handlePrint} variant="success" size="sm" className="flex items-center gap-2 font-bold px-4">
+                  <Printer className="h-4 w-4" />
+                  {language === "ar" ? "طباعة الفاتورة والباركود" : "Print PDF / Receipt"}
+                </Button>
+              </div>
             </div>
 
             {/* PRINT WRAPPER FRAME FOR CSS SELECTORS */}
@@ -385,6 +512,167 @@ export const InvoicesPage: React.FC = () => {
         )}
       </Modal>
 
+
+      {/* ── Edit Invoice Modal ── */}
+      <Modal isOpen={editOpen} onClose={() => { setEditOpen(false); setEditingInvoice(null); }}
+        title={`${language === "ar" ? "تعديل الفاتورة" : "Edit Invoice"} — ${editingInvoice?.invoiceNumber || ""}`}
+        size="lg">
+        {editingInvoice && (
+          <div className="flex flex-col gap-5">
+
+            {/* Customer info */}
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">{language === "ar" ? "معلومات العميل" : "Customer Info"}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input label={language === "ar" ? "اسم العميل (إنجليزي)" : "Customer Name (EN)"} value={editCustomerName} onChange={e => setEditCustomerName(e.target.value)} />
+                <Input label={language === "ar" ? "اسم العميل (عربي)" : "Customer Name (AR)"} value={editCustomerNameAr} onChange={e => setEditCustomerNameAr(e.target.value)} />
+                <Input label={language === "ar" ? "الرقم الضريبي" : "VAT Number"} value={editCustomerVat} onChange={e => setEditCustomerVat(e.target.value)} placeholder="300XXXXXXXXXXX3" />
+              </div>
+            </div>
+
+            {/* Dates */}
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">{language === "ar" ? "التواريخ" : "Dates"}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input label={language === "ar" ? "تاريخ الإصدار" : "Issue Date"} type="date" value={editIssueDate} onChange={e => setEditIssueDate(e.target.value)} />
+                <Input label={language === "ar" ? "تاريخ الاستحقاق" : "Due Date"} type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} />
+                <Input label={language === "ar" ? "تاريخ التوريد" : "Supply Date"} type="date" value={editSupplyDate} onChange={e => setEditSupplyDate(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Payment */}
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">{language === "ar" ? "حالة الدفع" : "Payment"}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Select label={language === "ar" ? "حالة الفاتورة" : "Invoice Status"} value={editStatus} onChange={e => setEditStatus(e.target.value)}
+                  options={[
+                    { value: "draft",     label: language === "ar" ? "مسودة" : "Draft" },
+                    { value: "approved",  label: language === "ar" ? "معتمدة" : "Approved" },
+                    { value: "paid",      label: language === "ar" ? "مدفوعة" : "Paid" },
+                    { value: "cancelled", label: language === "ar" ? "ملغية" : "Cancelled" },
+                  ]} />
+                <Select label={language === "ar" ? "حالة الدفع" : "Payment Status"} value={editPaymentStatus} onChange={e => setEditPaymentStatus(e.target.value)}
+                  options={[
+                    { value: "unpaid",         label: language === "ar" ? "غير مدفوعة" : "Unpaid" },
+                    { value: "partial",        label: language === "ar" ? "مدفوعة جزئياً" : "Partial" },
+                    { value: "paid",           label: language === "ar" ? "مدفوعة بالكامل" : "Fully Paid" },
+                  ]} />
+                <Input label={language === "ar" ? "المبلغ المدفوع (ر.س)" : "Amount Paid (SAR)"} type="number" min="0" step="0.01"
+                  value={editAmountPaid} onChange={e => setEditAmountPaid(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Line Items */}
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">{language === "ar" ? "بنود الفاتورة" : "Line Items"}</p>
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="grid grid-cols-12 gap-1 bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200">
+                  <span className="col-span-4">{language === "ar" ? "الوصف" : "Description"}</span>
+                  <span className="col-span-1 text-center">{language === "ar" ? "الكمية" : "Qty"}</span>
+                  <span className="col-span-2 text-center">{language === "ar" ? "السعر" : "Price"}</span>
+                  <span className="col-span-1 text-center">{language === "ar" ? "خصم" : "Disc"}</span>
+                  <span className="col-span-1 text-center">{language === "ar" ? "ضريبة" : "VAT%"}</span>
+                  <span className="col-span-2 text-end">{language === "ar" ? "الإجمالي" : "Total"}</span>
+                  <span className="col-span-1" />
+                </div>
+                {editLines.map((line, idx) => {
+                  const net = line.qty * line.unitPrice - (line.discountAmount || 0);
+                  const vat = Math.round(net * (line.vatRate / 100) * 100) / 100;
+                  const total = Math.round((net + vat) * 100) / 100;
+                  return (
+                    <div key={idx} className="grid grid-cols-12 gap-1 px-3 py-2 border-b border-slate-50 last:border-0 items-center hover:bg-slate-50/50">
+                      <input value={line.name} onChange={e => updateEditLine(idx, "name", e.target.value)}
+                        className="col-span-4 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-primary" />
+                      <input type="number" value={line.qty} onChange={e => updateEditLine(idx, "qty", +e.target.value)} min={1}
+                        className="col-span-1 text-xs border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none text-center" />
+                      <input type="number" value={line.unitPrice} onChange={e => updateEditLine(idx, "unitPrice", +e.target.value)} min={0} step={0.01}
+                        className="col-span-2 text-xs border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none" />
+                      <input type="number" value={line.discountAmount || 0} onChange={e => updateEditLine(idx, "discountAmount", +e.target.value)} min={0} step={0.01}
+                        className="col-span-1 text-xs border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none" />
+                      <select value={line.vatRate} onChange={e => updateEditLine(idx, "vatRate", +e.target.value)}
+                        className="col-span-1 text-xs border border-slate-200 rounded-lg px-1 py-1.5 focus:outline-none">
+                        <option value={0}>0%</option>
+                        <option value={5}>5%</option>
+                        <option value={15}>15%</option>
+                      </select>
+                      <span className="col-span-2 text-xs font-semibold text-slate-700 text-end pr-1">
+                        {total.toLocaleString("en", { minimumFractionDigits: 2 })}
+                      </span>
+                      <div className="col-span-1 flex justify-center">
+                        {editLines.length > 1 && (
+                          <button onClick={() => setEditLines(prev => prev.filter((_, i) => i !== idx))} className="p-1 text-slate-300 hover:text-red-500 rounded transition-colors">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={() => setEditLines(prev => [...prev, { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }])}
+                  className="w-full flex items-center justify-center gap-1 py-2.5 text-xs font-semibold text-brand-primary hover:bg-blue-50 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" /> {language === "ar" ? "إضافة بند" : "Add Line"}
+                </button>
+              </div>
+              {/* Live totals */}
+              <div className="mt-3 flex flex-col gap-1 text-xs max-w-xs ml-auto text-right">
+                {(() => {
+                  let sub = 0, vat = 0, disc = 0;
+                  editLines.forEach(l => {
+                    const net = l.qty * l.unitPrice - (l.discountAmount || 0);
+                    sub += net;
+                    vat += Math.round(net * (l.vatRate / 100) * 100) / 100;
+                    disc += l.discountAmount || 0;
+                  });
+                  const grand = sub + vat;
+                  return (
+                    <>
+                      <div className="flex justify-between text-slate-500"><span>{language === "ar" ? "الإجمالي الفرعي:" : "Subtotal:"}</span><span>{sub.toLocaleString("en", { minimumFractionDigits: 2 })} SAR</span></div>
+                      <div className="flex justify-between text-slate-500"><span>{language === "ar" ? "الضريبة:" : "VAT:"}</span><span>{vat.toLocaleString("en", { minimumFractionDigits: 2 })} SAR</span></div>
+                      <div className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1"><span>{language === "ar" ? "الإجمالي:" : "Grand Total:"}</span><span className="text-brand-primary">{grand.toLocaleString("en", { minimumFractionDigits: 2 })} SAR</span></div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-600">{language === "ar" ? "ملاحظات (إنجليزي)" : "Notes (EN)"}</label>
+                <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2}
+                  className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 resize-none" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-600">{language === "ar" ? "ملاحظات (عربي)" : "Notes (AR)"}</label>
+                <textarea value={editNotesAr} onChange={e => setEditNotesAr(e.target.value)} rows={2}
+                  className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/20 resize-none" />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+              <button
+                onClick={() => handleDeleteInvoice(editingInvoice)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+                {language === "ar" ? "حذف الفاتورة" : "Delete Invoice"}
+              </button>
+              <div className="flex items-center gap-3">
+                <Button variant="secondary" onClick={() => { setEditOpen(false); setEditingInvoice(null); }}>
+                  {language === "ar" ? "إلغاء" : "Cancel"}
+                </Button>
+                <Button onClick={handleSaveEdit} loading={editSaving} className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" />
+                  {language === "ar" ? "حفظ التعديلات" : "Save Changes"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <PrintManager
         isOpen={showPrint}
