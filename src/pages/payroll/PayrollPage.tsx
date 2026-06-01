@@ -9,7 +9,7 @@ import { PrintManager } from "../../components/ui/PrintManager";
 import { useAuthStore } from "../../stores/authStore";
 import { listenCompanyCollection, saveEmployee, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { db } from "../../firebase/config";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, getDocs, query, where } from "firebase/firestore";
 import { isValidSaudiIban } from "../../utils/validators";
 import { formatCurrency } from "../../utils/formatters";
 import { SalaryAdvance } from "../../types";
@@ -31,47 +31,6 @@ const PayslipModal: React.FC<{ employee: Employee; month: string; onClose: () =>
   const gross = employee.basicSalary + employee.housingAllowance + employee.transportAllowance + (employee.foodAllowance || 0);
 
   // Options for customising printout
-
-  // ── Export panel (same as invoices/quotations) ────────────────────────
-  const [showExportPanel, setShowExportPanel] = React.useState(false);
-  const [expLHMode, setExpLHMode] = React.useState<"none"|"header"|"full">("none");
-  const [expLHId, setExpLHId] = React.useState("primary");
-  const [expLogo, setExpLogo] = React.useState(true);
-  const [expStamp, setExpStamp] = React.useState(false);
-  const [expSigId, setExpSigId] = React.useState("");
-  const [expIncludeSig, setExpIncludeSig] = React.useState(false);
-  const [expSignatories, setExpSignatories] = React.useState<any[]>([]);
-  const [expLetterheads, setExpLetterheads] = React.useState<any[]>([]);
-  const [expGenerating, setExpGenerating] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!showExportPanel) { setExpSignatories([]); setExpSigId(""); setExpIncludeSig(false); }
-  }, [showExportPanel]);
-
-  const openExportPanel = () => {
-    const co = currentCompany as any;
-    const lhs: any[] = [{ id: "primary", name: "Primary Letterhead", url: co?.fullLetterhead || "" }];
-    (co?.additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
-    setExpLetterheads(lhs);
-    setExpLogo(co?.defaultShowLogo ?? !!(co?.logo));
-    setExpStamp(co?.defaultShowStamp ?? !!(co?.stamp));
-    if (co?.fullLetterhead) setExpLHMode("full");
-    else if (co?.additionalLetterheads?.length) setExpLHMode("header");
-    else setExpLHMode("none");
-    if (currentCompany) {
-      getDocs(query(collection(db, "companies", currentCompany.id, "signatories"), where("isActive", "==", true)))
-        .then(snap => {
-          const sigs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
-          setExpSignatories(sigs);
-          if (sigs.length === 1) { setExpSigId(sigs[0].id); setExpIncludeSig(!!(sigs[0] as any).signatureUrl); }
-          else if (co?.defaultSignatoryId) {
-            const fnd = sigs.find((s: any) => s.id === co.defaultSignatoryId);
-            if (fnd) { setExpSigId(fnd.id); setExpIncludeSig(!!(fnd as any).signatureUrl); }
-          }
-        }).catch(() => {});
-    }
-    setShowExportPanel(true);
-  };
 
   const [showLogo,       setShowLogo]       = React.useState(true);
   const [showLetterhead, setShowLetterhead] = React.useState(false);
@@ -245,6 +204,47 @@ export const PayrollPage: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [showPrint, setShowPrint] = React.useState(false);
+
+  // ── Export panel (same as invoices/quotations) ────────────────────────
+  const [showExportPanel, setShowExportPanel] = React.useState(false);
+  const [expLHMode, setExpLHMode] = React.useState<"none"|"header"|"full">("none");
+  const [expLHId, setExpLHId] = React.useState("primary");
+  const [expLogo, setExpLogo] = React.useState(true);
+  const [expStamp, setExpStamp] = React.useState(false);
+  const [expSigId, setExpSigId] = React.useState("");
+  const [expIncludeSig, setExpIncludeSig] = React.useState(false);
+  const [expSignatories, setExpSignatories] = React.useState<any[]>([]);
+  const [expLetterheads, setExpLetterheads] = React.useState<any[]>([]);
+  const [expGenerating, setExpGenerating] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!showExportPanel) { setExpSignatories([]); setExpSigId(""); setExpIncludeSig(false); }
+  }, [showExportPanel]);
+
+  const openExportPanel = () => {
+    const co = currentCompany as any;
+    const lhs: any[] = [{ id: "primary", name: "Primary Letterhead", url: co?.fullLetterhead || "" }];
+    (co?.additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
+    setExpLetterheads(lhs);
+    setExpLogo(co?.defaultShowLogo ?? !!(co?.logo));
+    setExpStamp(co?.defaultShowStamp ?? !!(co?.stamp));
+    if (co?.fullLetterhead) setExpLHMode("full");
+    else if (co?.additionalLetterheads?.length) setExpLHMode("header");
+    else setExpLHMode("none");
+    if (currentCompany) {
+      getDocs(query(collection(db, "companies", currentCompany.id, "signatories"), where("isActive", "==", true)))
+        .then(snap => {
+          const sigs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          setExpSignatories(sigs);
+          if (sigs.length === 1) { setExpSigId(sigs[0].id); setExpIncludeSig(!!(sigs[0] as any).signatureUrl); }
+          else if (co?.defaultSignatoryId) {
+            const fnd = sigs.find((s: any) => s.id === co.defaultSignatoryId);
+            if (fnd) { setExpSigId(fnd.id); setExpIncludeSig(!!(fnd as any).signatureUrl); }
+          }
+        }).catch(() => {});
+    }
+    setShowExportPanel(true);
+  };
 
   // Employee form
   const [name, setName] = React.useState("");
