@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Eye, ShoppingCart, CheckCircle, XCircle, Trash2, Package, Printer } from "lucide-react";
+import { Plus, Eye, ShoppingCart, CheckCircle, XCircle, Trash2, Package, Printer, List, Pencil } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
@@ -44,6 +44,22 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [lines, setLines] = React.useState<LineItem[]>([
     { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }
   ]);
+  // per-line mode: "select" = pick from products list, "manual" = free text
+  const [lineModes, setLineModes] = React.useState<("select"|"manual")[]>(["select"]);
+  // per-line custom unit text (when user types a custom unit)
+  const [lineUnits, setLineUnits] = React.useState<string[]>(["PCE"]);
+
+  const PRESET_UNITS = ["PCE","KG","LTR","MTR","HR","DAY","SRV","SET","BOX","TON","M2","M3","NOS","LS"];
+
+  const toggleLineMode = (idx: number) => {
+    setLineModes(prev => { const n=[...prev]; n[idx]=n[idx]==="select"?"manual":"select"; return n; });
+    setLines(prev => { const u=[...prev]; u[idx]={...u[idx],productId:"",name:"",nameAr:""}; return u; });
+  };
+
+  const setLineUnit = (idx: number, val: string) => {
+    setLineUnits(prev => { const u=[...prev]; u[idx]=val; return u; });
+    setLines(prev => { const u=[...prev]; u[idx]={...u[idx],unit:val}; return u; });
+  };
 
   React.useEffect(() => {
     if (!currentCompany) return;
@@ -59,11 +75,31 @@ export const PurchaseOrdersPage: React.FC = () => {
     const updated = [...lines];
     updated[idx] = { ...updated[idx], [field]: value };
     if (field === "productId") {
-      const p = products.find(p => p.id === value);
-      if (p) { updated[idx].name = p.name; updated[idx].nameAr = p.nameAr; updated[idx].unitPrice = p.costPrice || p.salePrice; updated[idx].vatRate = p.vatRate; }
+      const p = products.find(pr => pr.id === value);
+      if (p) {
+        updated[idx].name = p.name;
+        updated[idx].nameAr = p.nameAr;
+        updated[idx].unitPrice = p.costPrice || p.salePrice;
+        updated[idx].vatRate = p.vatRate;
+        const pu = p.unit || "PCE";
+        updated[idx].unit = pu;
+        setLineUnits(prev => { const u=[...prev]; u[idx]=pu; return u; });
+      }
     }
     updated[idx] = calculateLineItem(updated[idx]);
     setLines(updated);
+  };
+
+  const handleAddLine = () => {
+    setLines(prev => [...prev, { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
+    setLineModes(prev => [...prev, "select"]);
+    setLineUnits(prev => [...prev, "PCE"]);
+  };
+
+  const handleDeleteLine = (idx: number) => {
+    setLines(prev => prev.filter((_, i) => i !== idx));
+    setLineModes(prev => prev.filter((_, i) => i !== idx));
+    setLineUnits(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleSave = async () => {
@@ -105,6 +141,8 @@ export const PurchaseOrdersPage: React.FC = () => {
   const resetForm = () => {
     setSupplierId(""); setNotes("");
     setLines([{ productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
+    setLineModes(["select"]);
+    setLineUnits(["PCE"]);
   };
 
   const statusLabel = (s: POStatus) => {
@@ -205,28 +243,126 @@ export const PurchaseOrdersPage: React.FC = () => {
             <Input label={language === "ar" ? "ملاحظات" : "Notes"} value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
           <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="bg-slate-50 px-3 py-2 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "البنود" : "Items"}</span>
-              <button onClick={() => setLines([...lines, { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }])}
-                className="text-xs text-brand-primary font-semibold hover:underline flex items-center gap-1"><Plus className="h-3 w-3" /> {language === "ar" ? "إضافة" : "Add"}</button>
+            <div className="bg-slate-50 px-3 py-2 flex items-center justify-between border-b border-slate-200">
+              <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "البنود" : "Line Items"}</span>
+              <button type="button" onClick={handleAddLine}
+                className="text-xs text-brand-primary font-semibold hover:underline flex items-center gap-1">
+                <Plus className="h-3 w-3" /> {language === "ar" ? "إضافة بند" : "Add Line"}
+              </button>
             </div>
-            {lines.map((line, idx) => (
-              <div key={idx} className="grid grid-cols-5 gap-2 p-3 border-b border-slate-100 last:border-0">
-                <select value={line.productId} onChange={e => updateLine(idx, "productId", e.target.value)}
-                  className="col-span-2 text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none">
-                  <option value="">{language === "ar" ? "اختر منتج" : "Select product"}</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-                <input type="number" value={line.qty} onChange={e => updateLine(idx, "qty", +e.target.value)} min={1}
-                  className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" placeholder="Qty" />
-                <input type="number" value={line.unitPrice} onChange={e => updateLine(idx, "unitPrice", +e.target.value)} min={0}
-                  className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" placeholder="Price" />
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-semibold text-slate-700">{formatCurrency(line.lineTotal, language)}</span>
-                  {lines.length > 1 && <button onClick={() => setLines(lines.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
+
+            {lines.map((line, idx) => {
+              const mode = lineModes[idx] || "select";
+              const currentUnit = lineUnits[idx] || line.unit || "PCE";
+              const isCustomUnit = !PRESET_UNITS.includes(currentUnit);
+              return (
+                <div key={idx} className="p-3 border-b border-slate-100 last:border-0 space-y-2">
+                  {/* Row 1: mode toggle + product/name */}
+                  <div className="flex items-start gap-2">
+                    {/* Mode toggle */}
+                    <div className="flex flex-col gap-1 shrink-0 pt-0.5">
+                      <button type="button" onClick={() => { if (mode !== "select") toggleLineMode(idx); }}
+                        className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${mode === "select" ? "bg-brand-primary text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                        <List className="h-2.5 w-2.5" />{language === "ar" ? "قائمة" : "List"}
+                      </button>
+                      <button type="button" onClick={() => { if (mode !== "manual") toggleLineMode(idx); }}
+                        className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${mode === "manual" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                        <Pencil className="h-2.5 w-2.5" />{language === "ar" ? "يدوي" : "Manual"}
+                      </button>
+                    </div>
+
+                    {/* Product / name */}
+                    <div className="flex-1 min-w-0">
+                      {mode === "select" ? (
+                        <select value={line.productId} onChange={e => updateLine(idx, "productId", e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-brand-primary">
+                          <option value="">{language === "ar" ? "— اختر منتجاً —" : "— Select product —"}</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{language === "ar" ? (p.nameAr||p.name) : p.name}</option>)}
+                        </select>
+                      ) : (
+                        <div className="space-y-1">
+                          <input value={line.name} onChange={e => updateLine(idx, "name", e.target.value)}
+                            placeholder={language === "ar" ? "اسم المنتج / الخدمة" : "Product / Service name"}
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-400" />
+                          <input value={line.nameAr || ""} onChange={e => updateLine(idx, "nameAr", e.target.value)}
+                            placeholder={language === "ar" ? "الاسم بالعربي (اختياري)" : "Arabic name (optional)"}
+                            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-400" dir="rtl" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 2: Qty | Unit | Price | VAT% | Total | Delete */}
+                  <div className="grid grid-cols-12 gap-2 items-end pl-16">
+                    {/* Qty */}
+                    <div className="col-span-2">
+                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "الكمية" : "Qty"}</p>
+                      <input type="number" value={line.qty} min={1}
+                        onChange={e => updateLine(idx, "qty", +e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" />
+                    </div>
+
+                    {/* Unit — preset dropdown + custom text */}
+                    <div className="col-span-3">
+                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "الوحدة" : "Unit"}</p>
+                      {isCustomUnit ? (
+                        <div className="flex gap-1">
+                          <input value={currentUnit}
+                            onChange={e => setLineUnit(idx, e.target.value)}
+                            placeholder="e.g. m/roll"
+                            className="flex-1 min-w-0 text-xs border border-emerald-300 rounded px-2 py-1.5 focus:outline-none" />
+                          <button type="button" onClick={() => setLineUnit(idx, "PCE")}
+                            className="text-[10px] text-slate-400 hover:text-slate-600 px-1" title="Reset">↩</button>
+                        </div>
+                      ) : (
+                        <select value={currentUnit}
+                          onChange={e => {
+                            if (e.target.value === "__custom__") {
+                              setLineUnit(idx, "");
+                            } else {
+                              setLineUnit(idx, e.target.value);
+                            }
+                          }}
+                          className="w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 focus:outline-none">
+                          {PRESET_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                          <option value="__custom__">✏ Custom...</option>
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Unit Price */}
+                    <div className="col-span-3">
+                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "السعر" : "Unit Price"}</p>
+                      <input type="number" value={line.unitPrice} min={0} step={0.01}
+                        onChange={e => updateLine(idx, "unitPrice", +e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" />
+                    </div>
+
+                    {/* VAT */}
+                    <div className="col-span-2">
+                      <p className="text-[10px] text-slate-400 mb-0.5">VAT %</p>
+                      <select value={line.vatRate} onChange={e => updateLine(idx, "vatRate", +e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 focus:outline-none">
+                        <option value={0}>0%</option>
+                        <option value={5}>5%</option>
+                        <option value={15}>15%</option>
+                      </select>
+                    </div>
+
+                    {/* Total + delete */}
+                    <div className="col-span-2 flex items-end gap-1 pb-0.5">
+                      <span className="text-xs font-bold text-slate-800 flex-1 text-right">{formatCurrency(line.lineTotal, language)}</span>
+                      {lines.length > 1 && (
+                        <button type="button" onClick={() => handleDeleteLine(idx)}
+                          className="text-red-400 hover:text-red-600 shrink-0">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
             <div className="flex justify-between text-slate-600"><span>{language === "ar" ? "المجموع الفرعي" : "Subtotal"}</span><span>{formatCurrency(totals.subtotal, language)}</span></div>
