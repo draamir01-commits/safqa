@@ -11,6 +11,8 @@ import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
 
 import { listenCompanyCollection, updateDocument, deleteDocument } from "../../firebase/firestore";
+import { db } from "../../firebase/config";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { generateZatcaQrHtmlCanvas, generateQRDataURL, encodeTLV } from "../../utils/zatca/qrEncoder";
 import { processPhase1Invoice } from "../../utils/zatca/phase1";
 import { formatCurrency, formatDate } from "../../utils/formatters";
@@ -71,27 +73,21 @@ export const InvoicesPage: React.FC = () => {
     if (co?.fullLetterhead) setExpLHMode("full");
     else if (co?.additionalLetterheads?.length) setExpLHMode("header");
     else setExpLHMode("none");
-    // Load signatories asynchronously — they will populate while panel is open
+    // Load signatories using top-level imported Firestore functions
     if (currentCompany) {
-      (async () => {
-        try {
-          const { collection: fc, query: fq, where: fw, getDocs: fgd } = await import("firebase/firestore");
-          const qsig = fq(fc(db, "companies", currentCompany.id, "signatories"), fw("isActive", "==", true));
-          const snap = await fgd(qsig);
+      getDocs(query(collection(db, "companies", currentCompany.id, "signatories"), where("isActive", "==", true)))
+        .then(snap => {
           const sigs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
           setExpSignatories(sigs);
-          // Auto-select single signatory
           if (sigs.length === 1) {
             setExpSigId(sigs[0].id);
             setExpIncludeSig(!!(sigs[0] as any).signatureUrl);
-          }
-          // Auto-select from company default
-          if (co?.defaultSignatoryId && !expSigId) {
+          } else if (co?.defaultSignatoryId) {
             const found = sigs.find((s: any) => s.id === co.defaultSignatoryId);
             if (found) { setExpSigId(found.id); setExpIncludeSig(!!(found as any).signatureUrl); }
           }
-        } catch (e) { console.warn("Failed to load signatories:", e); }
-      })();
+        })
+        .catch(e => console.warn("Signatories load failed:", e));
     }
     setShowExportPanel(true);
   };
