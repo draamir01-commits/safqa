@@ -77,7 +77,18 @@ export const InvoicesPage: React.FC = () => {
   }, [showExportPanel, currentCompany]);
 
   const openExportPanel = (inv: Invoice) => {
+    const co = currentCompany as any;
     setExportingInvoice(inv);
+    // Pre-build letterheads immediately (no async needed)
+    const lhs: any[] = [{ id: "primary", name: "Primary Letterhead", url: co?.fullLetterhead || "" }];
+    (co?.additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
+    setExpLetterheads(lhs);
+    // Smart defaults
+    setExpLogo(co?.defaultShowLogo ?? !!(co?.logo));
+    setExpStamp(co?.defaultShowStamp ?? !!(co?.stamp));
+    if (co?.fullLetterhead) setExpLHMode("full");
+    else if (co?.additionalLetterheads?.length) setExpLHMode("header");
+    else setExpLHMode("none");
     setShowExportPanel(true);
   };
   const [qrDataUrl, setQrDataUrl] = React.useState<string>("");
@@ -214,8 +225,11 @@ export const InvoicesPage: React.FC = () => {
     const titleAR = inv.type === "simplified" ? "فاتورة ضريبية مبسطة" : "فاتورة ضريبية";
     const o = opts || { lhMode: "none", lhId: "primary", logo: true, stamp: false, sigId: "", includeSig: false };
 
-    // Resolve letterhead image
-    const selLH = expLetterheads.find((l: any) => l.id === o.lhId) || expLetterheads[0];
+    // Resolve letterhead image — build list inline as fallback if state not loaded yet
+    const lhList = expLetterheads.length > 0 ? expLetterheads :
+      [{ id: "primary", url: co?.fullLetterhead || "" },
+       ...((co?.additionalLetterheads || []) as any[])];
+    const selLH = lhList.find((l: any) => l.id === o.lhId) || lhList[0];
     const lhImgUrl = selLH?.url || co?.fullLetterhead || "";
     const footerImgUrl = co?.footerAsset || co?.letterheadFooter || "";
 
@@ -497,11 +511,7 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
     setEditLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l));
   };
 
-  // Both Export PDF and Print route through the same export panel
-  const handlePrint = () => {
-    if (!selectedInvoice) return;
-    openExportPanel(selectedInvoice);
-  };
+
 
   const columns: Column<Invoice>[] = [
     {
@@ -638,17 +648,9 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
                   <Pencil className="h-3.5 w-3.5" />
                   {language === "ar" ? "تعديل" : "Edit"}
                 </Button>
-                <Button
-                  variant="secondary" size="sm"
-                  onClick={() => openExportPanel(selectedInvoice)}
-                  className="flex items-center gap-2"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  {language === "ar" ? "تصدير PDF" : "Export / Print PDF"}
-                </Button>
-                <Button onClick={handlePrint} variant="success" size="sm" className="flex items-center gap-2 font-bold px-4">
+                <Button onClick={() => openExportPanel(selectedInvoice)} variant="success" size="sm" className="flex items-center gap-2 font-bold px-4">
                   <Printer className="h-4 w-4" />
-                  {language === "ar" ? "طباعة / PDF" : "Print / Save PDF"}
+                  {language === "ar" ? "طباعة / تصدير PDF" : "Print / Export PDF"}
                 </Button>
               </div>
             </div>
