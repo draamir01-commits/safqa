@@ -93,7 +93,14 @@ export const AttendancePage: React.FC = () => {
           </h2>
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "تسجيل حضور وغياب الموظفين يومياً" : "Track daily employee attendance"}</p>
         </div>
-        <ExportMenu data={monthRecords} filename={`attendance-${selectedMonth}`} headers={{ date: "Date", employeeName: "Employee", status: "Status" }} />
+        <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
+          <ExportMenu data={monthRecords} filename={`attendance-${selectedMonth}`} headers={{ date: "Date", employeeName: "Employee", status: "Status" }} />
       </div>
 
       {/* Month stats */}
