@@ -9,7 +9,7 @@ import { listenCompanyCollection, addDocument, updateDocument } from "../../fire
 import { AttendanceRecord } from "../../types";
 import Button from "../../components/ui/Button";
 import Select from "../../components/ui/Select";
-import { ExportButton } from "../../components/ui/ExportButton";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 
 interface Employee { id: string; name: string; nameAr: string; }
 
@@ -93,7 +93,7 @@ export const AttendancePage: React.FC = () => {
           </h2>
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "تسجيل حضور وغياب الموظفين يومياً" : "Track daily employee attendance"}</p>
         </div>
-        <ExportButton data={monthRecords} filename={`attendance-${selectedMonth}`} headers={{ date: "Date", employeeName: "Employee", status: "Status" }} />
+        <ExportMenu data={monthRecords} filename={`attendance-${selectedMonth}`} headers={{ date: "Date", employeeName: "Employee", status: "Status" }} />
       </div>
 
       {/* Month stats */}
