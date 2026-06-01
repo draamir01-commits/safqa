@@ -12,7 +12,7 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
-import { ExportButton } from "../../components/ui/ExportButton";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 
 const CATEGORIES = ["office", "transport", "meals", "maintenance", "utilities", "other"];
 
@@ -86,7 +86,7 @@ export const PettyCashPage: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "إدارة المصروفات النثرية اليومية" : "Manage daily petty cash transactions"}</p>
         </div>
         <div className="flex gap-2">
-          <ExportButton data={entries} filename="petty-cash" headers={{ date: "Date", description: "Description", type: "Type", amount: "Amount", balance: "Balance" }} />
+          <ExportMenu data={entries} filename="petty-cash" headers={{ date: "Date", description: "Description", type: "Type", amount: "Amount", balance: "Balance" }} />
 
           <button
             onClick={() => setShowPrint(true)}
