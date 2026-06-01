@@ -12,7 +12,7 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
-import { ExportButton } from "../../components/ui/ExportButton";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 
 const CATEGORIES = ["rent", "utilities", "insurance", "subscriptions", "maintenance", "other"];
 
@@ -102,7 +102,7 @@ export const OverheadsPage: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "تتبع المصاريف الثابتة والمتكررة" : "Track fixed and recurring overhead expenses"}</p>
         </div>
         <div className="flex gap-2">
-          <ExportButton data={overheads} filename="overheads" headers={{ date: "Date", title: "Title", category: "Category", totalAmount: "Total", isRecurring: "Recurring" }} />
+          <ExportMenu data={overheads} filename="overheads" headers={{ date: "Date", title: "Title", category: "Category", totalAmount: "Total", isRecurring: "Recurring" }} />
 
           <button
             onClick={() => setShowPrint(true)}
