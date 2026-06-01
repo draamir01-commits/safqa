@@ -49,37 +49,19 @@ export const InvoicesPage: React.FC = () => {
   const [expLetterheads, setExpLetterheads] = React.useState<any[]>([]);
   const [expGenerating, setExpGenerating] = React.useState(false);
 
+    // Reset signatories when panel closes
   React.useEffect(() => {
-    if (!showExportPanel || !currentCompany) return;
-    const co = currentCompany as any;
-    // Load signatories
-    // Load signatories using already-imported db and collection functions
-    (async () => {
-      try {
-        const { collection: fc, query: fq, where: fw, getDocs: fgd } = await import("firebase/firestore");
-        const qsig = fq(fc(db, "companies", currentCompany.id, "signatories"), fw("isActive", "==", true));
-        const snap = await fgd(qsig);
-        const sigs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
-        setExpSignatories(sigs);
-        if (sigs.length === 1) { setExpSigId(sigs[0].id); setExpIncludeSig(!!(sigs[0] as any).signatureUrl); }
-      } catch {}
-    })();
-    // Build letterheads
-    const lhs: any[] = [{ id: "primary", name: "Primary Letterhead", url: co?.fullLetterhead || "" }];
-    (co?.additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
-    setExpLetterheads(lhs);
-    // Smart defaults
-    setExpLogo(co?.defaultShowLogo ?? !!(co?.logo));
-    setExpStamp(co?.defaultShowStamp ?? !!(co?.stamp));
-    if (co?.fullLetterhead) setExpLHMode("full");
-    else if (co?.additionalLetterheads?.length) setExpLHMode("header");
-    else setExpLHMode("none");
-  }, [showExportPanel, currentCompany]);
+    if (!showExportPanel) {
+      setExpSignatories([]);
+      setExpSigId("");
+      setExpIncludeSig(false);
+    }
+  }, [showExportPanel]);
 
   const openExportPanel = (inv: Invoice) => {
     const co = currentCompany as any;
     setExportingInvoice(inv);
-    // Pre-build letterheads immediately (no async needed)
+    // Pre-build letterheads immediately (synchronous — company data already in memory)
     const lhs: any[] = [{ id: "primary", name: "Primary Letterhead", url: co?.fullLetterhead || "" }];
     (co?.additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
     setExpLetterheads(lhs);
@@ -89,6 +71,28 @@ export const InvoicesPage: React.FC = () => {
     if (co?.fullLetterhead) setExpLHMode("full");
     else if (co?.additionalLetterheads?.length) setExpLHMode("header");
     else setExpLHMode("none");
+    // Load signatories asynchronously — they will populate while panel is open
+    if (currentCompany) {
+      (async () => {
+        try {
+          const { collection: fc, query: fq, where: fw, getDocs: fgd } = await import("firebase/firestore");
+          const qsig = fq(fc(db, "companies", currentCompany.id, "signatories"), fw("isActive", "==", true));
+          const snap = await fgd(qsig);
+          const sigs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          setExpSignatories(sigs);
+          // Auto-select single signatory
+          if (sigs.length === 1) {
+            setExpSigId(sigs[0].id);
+            setExpIncludeSig(!!(sigs[0] as any).signatureUrl);
+          }
+          // Auto-select from company default
+          if (co?.defaultSignatoryId && !expSigId) {
+            const found = sigs.find((s: any) => s.id === co.defaultSignatoryId);
+            if (found) { setExpSigId(found.id); setExpIncludeSig(!!(found as any).signatureUrl); }
+          }
+        } catch (e) { console.warn("Failed to load signatories:", e); }
+      })();
+    }
     setShowExportPanel(true);
   };
   const [qrDataUrl, setQrDataUrl] = React.useState<string>("");
@@ -534,6 +538,13 @@ export const InvoicesPage: React.FC = () => {
             <Eye className="h-3.5 w-3.5 text-slate-500" />
             <span className="text-xs">{language === "ar" ? "معاينة" : "View"}</span>
           </Button>
+          <button
+            onClick={async () => { await handleOpenPreview(row); openExportPanel(row); }}
+            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+            title={language === "ar" ? "تصدير PDF" : "Export / Print PDF"}
+          >
+            <Printer className="h-3.5 w-3.5" />
+          </button>
           <button
             onClick={() => handleOpenEdit(row)}
             className="p-1.5 text-slate-400 hover:text-brand-primary hover:bg-blue-50 rounded-lg transition-colors"
