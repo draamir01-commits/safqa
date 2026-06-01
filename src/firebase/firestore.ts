@@ -74,11 +74,37 @@ export async function getDocument(path: string, id: string) {
   }
 }
 
+// Deep-clean data before saving to Firestore
+// Removes undefined values, Firebase Auth objects, and non-serializable values
+function sanitizeForFirestore(obj: any, depth = 0): any {
+  if (depth > 10) return null;
+  if (obj === null || obj === undefined) return null;
+  if (obj instanceof Date) return obj;
+  if (Array.isArray(obj)) return obj.map(v => sanitizeForFirestore(v, depth + 1)).filter(v => v !== null || v === 0 || v === false || v === "");
+  if (typeof obj === "object") {
+    // Reject Firebase Auth user objects and similar (contain providerData, stsTokenManager etc.)
+    if ("providerData" in obj || "stsTokenManager" in obj || "apiKey" in obj) return null;
+    const clean: any = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v === undefined) continue;
+      const cleaned = sanitizeForFirestore(v, depth + 1);
+      // Only skip null for object values, keep primitives
+      if (cleaned === null && typeof v === "object" && v !== null && !(v instanceof Date)) continue;
+      clean[k] = cleaned === undefined ? null : cleaned;
+    }
+    return clean;
+  }
+  if (typeof obj === "function") return null;
+  if (typeof obj === "symbol") return null;
+  return obj;
+}
+
 export async function createDocumentWithId(path: string, id: string, data: any) {
   try {
     const docRef = doc(db, path, id);
+    const cleanData = sanitizeForFirestore(data) || {};
     await setDoc(docRef, {
-      ...data,
+      ...cleanData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -91,8 +117,9 @@ export async function createDocumentWithId(path: string, id: string, data: any) 
 export async function addDocument(path: string, data: any) {
   try {
     const colRef = collection(db, path);
+    const cleanData = sanitizeForFirestore(data) || {};
     const docRef = await addDoc(colRef, {
-      ...data,
+      ...cleanData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
