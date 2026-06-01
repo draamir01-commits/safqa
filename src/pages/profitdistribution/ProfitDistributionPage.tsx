@@ -12,7 +12,7 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
-import { ExportButton } from "../../components/ui/ExportButton";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 
 export const ProfitDistributionPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -103,7 +103,7 @@ export const ProfitDistributionPage: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "توزيع صافي الربح على الشركاء" : "Distribute net profit among business partners"}</p>
         </div>
         <div className="flex gap-2">
-          <ExportButton data={distributions} filename="profit-distributions" headers={{ period: "Period", netProfit: "Net Profit", status: "Status" }} />
+          <ExportMenu data={distributions} filename="profit-distributions" headers={{ period: "Period", netProfit: "Net Profit", status: "Status" }} />
 
           <button
             onClick={() => setShowPrint(true)}
