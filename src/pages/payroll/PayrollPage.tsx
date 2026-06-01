@@ -202,6 +202,7 @@ export const PayrollPage: React.FC = () => {
   const [runModalOpen, setRunModalOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [showPrint, setShowPrint] = React.useState(false);
 
   // Employee form
   const [name, setName] = React.useState("");
