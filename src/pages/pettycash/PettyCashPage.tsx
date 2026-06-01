@@ -1,10 +1,12 @@
 import * as React from "react";
-import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, FileText, X} from "lucide-react";
+import { Plus, Trash2, ArrowUpCircle, ArrowDownCircle, Wallet, Printer, FileText, X, Paperclip} from "lucide-react";
 import toast from "react-hot-toast";
 import { listenCompanyCollection, addDocument, deleteDocument } from "../../firebase/firestore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { AttachmentUploader } from "../../components/ui/AttachmentUploader";
+import { DocumentViewer } from "../../components/ui/DocumentViewer";
 import { useAuthStore } from "../../stores/authStore";
 import { formatCurrency } from "../../utils/formatters";
 import { PettyCash } from "../../types";
@@ -24,6 +26,9 @@ export const PettyCashPage: React.FC = () => {
   const { language } = useUIStore();
   const [entries, setEntries] = React.useState<PettyCash[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<string[]>([]);
+  const [viewingDoc, setViewingDoc] = React.useState<{ url: string; fileName: string } | null>(null);
+
 
   // ── Export panel (same as invoices/quotations) ────────────────────────
   const [showExportPanel, setShowExportPanel] = React.useState(false);
@@ -94,10 +99,11 @@ export const PettyCashPage: React.FC = () => {
         date, description, descriptionAr: description, type,
         amount: +amount, category, balance: newBalance,
         createdBy: user.uid, createdAt: new Date(),
+        attachments,
       });
       toast.success(language === "ar" ? "تمت الإضافة" : "Entry added");
       setShowForm(false);
-      setDescription(""); setAmount(""); setCategory("other");
+      setDescription(""); setAmount(""); setCategory("other"); setAttachments([]);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -216,6 +222,7 @@ export const PettyCashPage: React.FC = () => {
             <span className="text-slate-500">{language === "ar" ? "الرصيد بعد القيد:" : "Balance after entry:"} </span>
             <span className="font-bold text-slate-800">{formatCurrency(balance + (type === "in" ? +(amount || 0) : -(amount || 0)), language)}</span>
           </div>
+          <AttachmentUploader folder="petty-cash" attachments={attachments} onChange={setAttachments} />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowForm(false)}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
             <Button onClick={handleSave} loading={loading}>{language === "ar" ? "حفظ" : "Save"}</Button>
@@ -414,6 +421,13 @@ export const PettyCashPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <DocumentViewer
+        isOpen={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        url={viewingDoc?.url || null}
+        fileName={viewingDoc?.fileName}
+      />
 
       <PrintManager
         isOpen={showPrint}
