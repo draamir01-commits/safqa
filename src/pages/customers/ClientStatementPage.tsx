@@ -528,32 +528,133 @@ export const ClientStatementPage: React.FC = () => {
                       footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:5;background:#fff"><div style="padding:4px 12mm;border-top:0.5px solid #e8ecf0;display:flex;justify-content:space-between;font-size:7pt;color:#888"><span>${co?.name||""}</span><span>${new Date().toLocaleDateString()}</span></div><img src="${footerUrl}" style="width:100%;max-height:25mm;object-fit:cover;display:block"/></div>`;
                       padBot = "32mm";
                     }
-                    const rows = (clientInvoices as any[]).map((row: any, i: number) => {
-                      const cells = [String(row.invoiceNumber||""), String(row.issueDate||""), String(row.dueDate||""), String(row.grandTotal||""), String(row.amountPaid||""), String(row.status||"")];
-                      return `<tr style="background:${i%2===0?"#fff":"#f8fafc"}">` + cells.map(v=>`<td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt">${v}</td>`).join("") + "</tr>";
+                    // ── Build professional client statement PDF ──
+                    const cl = selectedClient as any;
+                    const totalInv  = clientInvoices.reduce((s: number, inv: any) => s + (inv.grandTotal || 0), 0);
+                    const totalPaid = clientInvoices.reduce((s: number, inv: any) => s + (inv.amountPaid || 0), 0);
+                    const totalVat  = clientInvoices.reduce((s: number, inv: any) => s + (inv.totalVat || 0), 0);
+                    const totalSub  = clientInvoices.reduce((s: number, inv: any) => s + (inv.subtotal || 0), 0);
+                    const totalOuts = totalInv - totalPaid;
+                    const SAR = (n: number) => n.toFixed(2) + " SAR";
+
+                    // Client info block
+                    const clientBlock = `
+                      <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:0.5px solid #c8cdd5;border-radius:4px">
+                        <tr style="background:#f8fafc">
+                          <td colspan="4" style="padding:8px 12px;border-bottom:1px solid #e2e8f0">
+                            <span style="font-size:10pt;font-weight:700;color:#1e293b">${cl?.name||""}</span>
+                            ${cl?.nameAr ? `<span style="font-family:Cairo,Arial,sans-serif;font-size:10pt;font-weight:700;color:#1e293b;direction:rtl;margin-right:16px;float:right">${cl.nameAr}</span>` : ""}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#64748b;font-weight:600;width:100px">VAT Number</td>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#1e293b;font-family:monospace">${cl?.vatNumber||"—"}</td>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#64748b;font-weight:600;width:100px">CR Number</td>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#1e293b;font-family:monospace">${cl?.crNumber||"—"}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#64748b;font-weight:600">Phone</td>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#1e293b">${cl?.phone||"—"}</td>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#64748b;font-weight:600">Email</td>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#1e293b">${cl?.email||"—"}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:5px 12px;font-size:7.5pt;color:#64748b;font-weight:600">Address</td>
+                          <td colspan="3" style="padding:5px 12px;font-size:7.5pt;color:#1e293b">${[cl?.address, cl?.city, cl?.country].filter(Boolean).join(", ")||"—"}</td>
+                        </tr>
+                      </table>`;
+
+                    // Period + generated date strip
+                    const periodBlock = `
+                      <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+                        <tr>
+                          <td style="padding:6px 10px;background:#1e293b;color:#fff;font-size:7.5pt;font-weight:600;width:120px">Statement Period</td>
+                          <td style="padding:6px 10px;background:#f1f5f9;font-size:7.5pt;color:#1e293b">${dateRange.start} to ${dateRange.end}</td>
+                          <td style="padding:6px 10px;background:#1e293b;color:#fff;font-size:7.5pt;font-weight:600;width:120px">Generated On</td>
+                          <td style="padding:6px 10px;background:#f1f5f9;font-size:7.5pt;color:#1e293b">${new Date().toLocaleDateString("en-GB")}</td>
+                        </tr>
+                      </table>`;
+
+                    // Invoice rows with running balance
+                    let runBal = 0;
+                    const invRows = clientInvoices.map((inv: any, i: number) => {
+                      const bal = (inv.grandTotal||0) - (inv.amountPaid||0);
+                      runBal += bal;
+                      const isOD = inv.status !== "paid" && new Date(inv.dueDate) < new Date();
+                      const statusColor = inv.status === "paid" ? "#059669" : isOD ? "#dc2626" : "#d97706";
+                      return `<tr style="background:${i%2===0?"#fff":"#f8fafc"}">
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;font-weight:700;color:#2563eb;font-family:monospace">${inv.invoiceNumber||""}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt">${inv.issueDate||""}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;${isOD?"color:#dc2626;font-weight:600":""}">${inv.dueDate||""}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right">${(inv.subtotal||0).toFixed(2)}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right;color:#666">${(inv.totalVat||0).toFixed(2)}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right;font-weight:700">${(inv.grandTotal||0).toFixed(2)}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right;color:#059669">${(inv.amountPaid||0).toFixed(2)}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right;font-weight:700;${bal>0?"color:#d97706":"color:#94a3b8"}">${bal.toFixed(2)}</td>
+                        <td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:center;color:${statusColor};font-weight:600">${inv.status||""}</td>
+                      </tr>`;
                     }).join("");
+
+                    // Summary totals box
+                    const summaryBox = `
+                      <table style="width:100%;border-collapse:collapse;margin-top:4px;margin-bottom:16px">
+                        <tr style="background:#f8fafc">
+                          <td style="padding:6px 10px;border:0.5px solid #c8cdd5;font-size:8pt;font-weight:700" colspan="6">Totals</td>
+                          <td style="padding:6px 10px;border:0.5px solid #c8cdd5;font-size:8pt;text-align:right">${totalSub.toFixed(2)}</td>
+                          <td style="padding:6px 10px;border:0.5px solid #c8cdd5;font-size:8pt;text-align:right;color:#666">${totalVat.toFixed(2)}</td>
+                          <td style="padding:6px 10px;border:0.5px solid #c8cdd5;font-size:8pt;text-align:right;font-weight:700">${totalInv.toFixed(2)}</td>
+                          <td style="padding:6px 10px;border:0.5px solid #c8cdd5;font-size:8pt;text-align:right;color:#059669">${totalPaid.toFixed(2)}</td>
+                          <td style="padding:6px 10px;border:0.5px solid #c8cdd5;font-size:8pt;text-align:right;font-weight:700;color:${totalOuts>0?"#d97706":"#059669"}">${totalOuts.toFixed(2)}</td>
+                          <td></td>
+                        </tr>
+                      </table>
+                      <table style="width:280px;border-collapse:collapse;margin-left:auto;margin-bottom:16px;border:0.5px solid #c8cdd5">
+                        <tr><td style="padding:6px 12px;font-size:8pt;font-weight:600;background:#f8fafc;border-bottom:0.5px solid #e2e8f0">Total Invoiced</td><td style="padding:6px 12px;font-size:8pt;text-align:right;border-bottom:0.5px solid #e2e8f0">${SAR(totalInv)}</td></tr>
+                        <tr><td style="padding:6px 12px;font-size:8pt;font-weight:600;background:#f8fafc;border-bottom:0.5px solid #e2e8f0">Total Paid</td><td style="padding:6px 12px;font-size:8pt;text-align:right;color:#059669;border-bottom:0.5px solid #e2e8f0">${SAR(totalPaid)}</td></tr>
+                        <tr style="background:#1e293b"><td style="padding:7px 12px;font-size:8.5pt;font-weight:700;color:#fff">Outstanding Balance</td><td style="padding:7px 12px;font-size:8.5pt;font-weight:700;text-align:right;color:${totalOuts>0?"#fbbf24":"#34d399"}">${SAR(totalOuts)}</td></tr>
+                      </table>`;
+
                     const sigHTML = (sigObj || (expStamp && co?.stamp)) ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px"><div style="flex:1">${sigObj ? `<div style="font-size:9pt;font-weight:700;margin-bottom:12px">Authorized Signatory</div>${expIncludeSig && sigObj.signatureUrl ? `<img src="${sigObj.signatureUrl}" style="height:36px;max-width:100px;object-fit:contain;display:block;margin-bottom:6px"/>` : `<div style="height:36px"></div>`}<div style="border-bottom:1.5px solid #333;width:160px;margin-bottom:5px"></div><div style="font-size:9.5pt;font-weight:700">${sigObj.name}</div><div style="font-size:8pt;color:#555">${sigObj.designation||""}</div>` : ""}</div>${expStamp && co?.stamp ? `<div style="text-align:center"><img src="${co.stamp}" style="width:80px;height:80px;object-fit:contain"/><div style="font-size:7pt;color:#888;margin-top:4px">Company Stamp</div></div>` : ""}</div>` : "";
+
+                    const docTitle = `Statement-${cl?.name||"Client"}-${dateRange.start}`;
                     const html = [
                       "<!DOCTYPE html><html><head><meta charset='UTF-8'/>",
-                      "<title>Client Statement</title>",
-                      "<style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important}",
+                      `<title>${docTitle}</title>`,
+                      "<style>",
+                      "*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}",
                       `body{font-family:Cairo,Arial,sans-serif;font-size:9pt;color:#1a1a1a;background:#fff;padding:${padTop} 12mm ${padBot}}`,
                       `@media print{@page{size:A4;margin:0}body{padding:${padTop} 8mm ${padBot}}}`,
                       "</style></head><body>",
                       headerHTML,
-                      "<div style='text-align:center;margin:8px 0 12px'>",
-                      "<span style='font-size:18pt;font-weight:800'>Client Statement</span>",
+                      // Title
+                      "<div style='text-align:center;margin:10px 0 4px'>",
+                      "<span style='font-size:20pt;font-weight:800;letter-spacing:-0.5px'>Client Statement</span>",
+                      "<span style='font-family:Cairo,Arial,sans-serif;font-size:14pt;font-weight:700;color:#64748b;direction:rtl;display:block;margin-top:2px'>\u0643\u0634\u0641 \u062d\u0633\u0627\u0628 \u0627\u0644\u0639\u0645\u064a\u0644</span>",
                       "</div>",
-                      "<div style='border-top:2px solid #e2e8f0;margin-bottom:12px'></div>",
-                      "<table style='width:100%;border-collapse:collapse;margin-bottom:12px'>",
-                      "<thead><tr style='background:#2d3748;color:#fff'>",
-                      "<th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Invoice #</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Date</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Due Date</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Total</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Paid</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Status</th>",
+                      "<div style='border-top:3px solid #1e293b;border-bottom:1px solid #e2e8f0;margin:10px 0 14px'></div>",
+                      // Client info
+                      clientBlock,
+                      // Period
+                      periodBlock,
+                      // Invoices table
+                      "<table style='width:100%;border-collapse:collapse;margin-bottom:0'>",
+                      "<thead><tr style='background:#1e293b;color:#fff'>",
+                      "<th style='padding:7px 8px;text-align:left;border:0.5px solid #334155;font-size:7.5pt'>Invoice #</th>",
+                      "<th style='padding:7px 8px;text-align:left;border:0.5px solid #334155;font-size:7.5pt'>Date</th>",
+                      "<th style='padding:7px 8px;text-align:left;border:0.5px solid #334155;font-size:7.5pt'>Due Date</th>",
+                      "<th style='padding:7px 8px;text-align:right;border:0.5px solid #334155;font-size:7.5pt'>Subtotal</th>",
+                      "<th style='padding:7px 8px;text-align:right;border:0.5px solid #334155;font-size:7.5pt'>VAT</th>",
+                      "<th style='padding:7px 8px;text-align:right;border:0.5px solid #334155;font-size:7.5pt'>Total</th>",
+                      "<th style='padding:7px 8px;text-align:right;border:0.5px solid #334155;font-size:7.5pt'>Paid</th>",
+                      "<th style='padding:7px 8px;text-align:right;border:0.5px solid #334155;font-size:7.5pt'>Balance</th>",
+                      "<th style='padding:7px 8px;text-align:center;border:0.5px solid #334155;font-size:7.5pt'>Status</th>",
                       "</tr></thead>",
-                      `<tbody>${rows}</tbody>`,
+                      `<tbody>${invRows}</tbody>`,
                       "</table>",
+                      summaryBox,
                       sigHTML,
                       footerHTML,
-                      "<script>window.onload=function(){setTimeout(function(){window.print()},1200)}</script>",
+                      `<script>document.title="${docTitle}";window.onload=function(){setTimeout(function(){window.print()},1200)}</script>`,
                       "</body></html>"
                     ].join("\n");
                     win.document.open(); win.document.write(html); win.document.close();
