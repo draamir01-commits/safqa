@@ -9,6 +9,8 @@ import { useCompanyStore } from "../../stores/companyStore";
 import { useAuthStore } from "../../stores/authStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { InvoicePrintDialog, InvoicePrintOptions } from "../../components/ui/InvoicePrintDialog";
+import { ZatcaInvoicePdf } from "../../components/ui/ZatcaInvoicePdf";
 import { listenCompanyCollection, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { generateZatcaQrHtmlCanvas, generateQRDataURL, encodeTLV } from "../../utils/zatca/qrEncoder";
 import { processPhase1Invoice } from "../../utils/zatca/phase1";
@@ -33,6 +35,8 @@ export const InvoicesPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [showPrint, setShowPrint] = React.useState(false);
+  const [showPrintDialog, setShowPrintDialog] = React.useState(false);
+  const [printOptions, setPrintOptions] = React.useState<InvoicePrintOptions | null>(null);
   const [qrDataUrl, setQrDataUrl] = React.useState<string>("");
   const [generatingQr, setGeneratingQr] = React.useState(false);
 
@@ -463,8 +467,27 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
 
   const handlePrint = () => {
     if (!selectedInvoice) return;
-    // Use the same professional HTML template as Export PDF — identical output
-    exportInvoicePDF(selectedInvoice, qrDataUrl);
+    setShowPrintDialog(true);
+  };
+
+  const handleConfirmPrint = (opts: InvoicePrintOptions) => {
+    setPrintOptions(opts);
+    setShowPrintDialog(false);
+  };
+
+  const handleExecutePrint = () => {
+    const style = document.createElement("style");
+    style.id = "__invoice-print-style__";
+    style.innerHTML = `@media print { body * { visibility: hidden; } #invoice-print-root, #invoice-print-root * { visibility: visible; } #invoice-print-root { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white !important; z-index: 99999; overflow: visible !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; } .no-print { display: none !important; } @page { margin: 8mm; size: A4; } }`;
+    document.head.appendChild(style);
+    const prevTitle = document.title;
+    document.title = selectedInvoice?.invoiceNumber || "Invoice";
+    window.print();
+    document.title = prevTitle;
+    setTimeout(() => {
+      const s = document.getElementById("__invoice-print-style__");
+      if (s) s.remove();
+    }, 1500);
   };
 
   const columns: Column<Invoice>[] = [
@@ -612,7 +635,7 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
                 </Button>
                 <Button onClick={handlePrint} variant="success" size="sm" className="flex items-center gap-2 font-bold px-4">
                   <Printer className="h-4 w-4" />
-                  {language === "ar" ? "طباعة" : "Print"}
+                  {language === "ar" ? "طباعة" : "Print / Save PDF"}
                 </Button>
               </div>
             </div>
@@ -952,6 +975,61 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
           </div>
         )}
       </Modal>
+
+      {/* Invoice Print Options Dialog */}
+      {showPrintDialog && selectedInvoice && (
+        <InvoicePrintDialog
+          isOpen={showPrintDialog}
+          onClose={() => setShowPrintDialog(false)}
+          onPrint={handleConfirmPrint}
+          companyId={currentCompany?.id || ""}
+          companyProfile={currentCompany}
+          invoiceNo={selectedInvoice.invoiceNumber}
+        />
+      )}
+
+      {/* Invoice Print Preview */}
+      {selectedInvoice && printOptions && (
+        <div id="invoice-print-root" style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100%", minHeight: "100vh", background: "rgba(15,23,42,0.65)", backdropFilter: "blur(2px)", zIndex: 9999, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "0.75rem", overflowY: "auto" }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-3" style={{ display: "flex", flexDirection: "column" }}>
+            {/* Toolbar */}
+            <div className="no-print flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white rounded-t-2xl z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">{selectedInvoice.invoiceNumber}</p>
+                  <p className="text-xs text-slate-400">{language === "ar" ? "معاينة قبل الطباعة" : "Print Preview"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExecutePrint}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  {language === "ar" ? "طباعة / حفظ PDF" : "Print / Save PDF"}
+                </button>
+                <button
+                  onClick={() => setPrintOptions(null)}
+                  className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Invoice content */}
+            <ZatcaInvoicePdf
+              invoice={selectedInvoice}
+              companyProfile={currentCompany}
+              qrDataUrl={qrDataUrl}
+              printOptions={printOptions}
+              language={language}
+            />
+          </div>
+        </div>
+      )}
 
       <PrintManager
         isOpen={showPrint}
