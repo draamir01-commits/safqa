@@ -1,10 +1,12 @@
 import * as React from "react";
-import { Plus, Trash2, Building2, RefreshCw, Printer, FileText, X} from "lucide-react";
+import { Plus, Trash2, Building2, RefreshCw, Printer, FileText, X, Paperclip} from "lucide-react";
 import toast from "react-hot-toast";
 import { listenCompanyCollection, addDocument, deleteDocument } from "../../firebase/firestore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { AttachmentUploader } from "../../components/ui/AttachmentUploader";
+import { DocumentViewer } from "../../components/ui/DocumentViewer";
 import { useAuthStore } from "../../stores/authStore";
 import { formatCurrency } from "../../utils/formatters";
 import { Overhead } from "../../types";
@@ -24,6 +26,9 @@ export const OverheadsPage: React.FC = () => {
   const { language } = useUIStore();
   const [overheads, setOverheads] = React.useState<Overhead[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<string[]>([]);
+  const [viewingDoc, setViewingDoc] = React.useState<{ url: string; fileName: string } | null>(null);
+
 
   // ── Export panel (same as invoices/quotations) ────────────────────────
   const [showExportPanel, setShowExportPanel] = React.useState(false);
@@ -104,10 +109,11 @@ export const OverheadsPage: React.FC = () => {
         date, title, titleAr: title, category, amount: amt, vatRate: vat,
         vatAmount: vatAmt, totalAmount: amt + vatAmt, isRecurring, notes,
         createdBy: user.uid, createdAt: new Date(),
+        attachments,
       });
       toast.success(language === "ar" ? "تمت الإضافة" : "Overhead added");
       setShowForm(false);
-      setTitle(""); setAmount(""); setNotes("");
+      setTitle(""); setAmount(""); setNotes(""); setAttachments([]);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -224,6 +230,7 @@ export const OverheadsPage: React.FC = () => {
             {language === "ar" ? "مصروف متكرر شهرياً" : "Recurring monthly expense"}
           </label>
           <Input label={language === "ar" ? "ملاحظات" : "Notes"} value={notes} onChange={e => setNotes(e.target.value)} placeholder={language === "ar" ? "اختياري" : "Optional"} />
+          <AttachmentUploader folder="overheads" attachments={attachments} onChange={setAttachments} />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowForm(false)}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
             <Button onClick={handleSave} loading={loading}>{language === "ar" ? "حفظ" : "Save"}</Button>
@@ -422,6 +429,13 @@ export const OverheadsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <DocumentViewer
+        isOpen={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        url={viewingDoc?.url || null}
+        fileName={viewingDoc?.fileName}
+      />
 
       <PrintManager
         isOpen={showPrint}
