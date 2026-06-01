@@ -8,6 +8,8 @@ import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
 import { useAuthStore } from "../../stores/authStore";
 import { listenCompanyCollection, saveEmployee, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
+import { db } from "../../firebase/config";
+import { collection, onSnapshot } from "firebase/firestore";
 import { isValidSaudiIban } from "../../utils/validators";
 import { formatCurrency } from "../../utils/formatters";
 import { SalaryAdvance } from "../../types";
@@ -41,13 +43,9 @@ const PayslipModal: React.FC<{ employee: Employee; month: string; onClose: () =>
 
   React.useEffect(() => {
     if (!currentCompany) return;
-    import("firebase/firestore").then(({ collection: col, onSnapshot: snap }) => {
-      import("../../firebase/config").then(({ db: fireDb }) => {
-        const unsub = snap(col(fireDb, "companies", currentCompany.id, "signatories"),
-          (s: any) => setSignatories(s.docs.map((d: any) => ({ id: d.id, ...d.data() }))));
-        // Note: unsub cleanup not straightforward with this pattern; it's acceptable for payslip modal
-      });
-    });
+    const unsub = onSnapshot(collection(db, "companies", currentCompany.id, "signatories"),
+      (s) => setSignatories(s.docs.map((d) => ({ id: d.id, ...d.data() } as any))));
+    return () => unsub();
   }, [currentCompany]);
 
   const selectedSignatory = signatories.find(s => s.id === selectedSig);
