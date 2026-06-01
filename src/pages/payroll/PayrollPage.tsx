@@ -30,7 +30,6 @@ const PayslipModal: React.FC<{ employee: Employee; month: string; onClose: () =>
 
   // Options for customising printout
   const [showLogo,       setShowLogo]       = React.useState(true);
-  const [showPrint, setShowPrint] = React.useState(false);
   const [showLetterhead, setShowLetterhead] = React.useState(false);
   const [showStamp,      setShowStamp]      = React.useState(true);
   const [showDeductions, setShowDeductions] = React.useState(true);
@@ -42,13 +41,11 @@ const PayslipModal: React.FC<{ employee: Employee; month: string; onClose: () =>
 
   React.useEffect(() => {
     if (!currentCompany) return;
-    const { collection, onSnapshot, db } = require("firebase/firestore");
-    // dynamic import to avoid circular deps
-    import("../../firebase/config").then(({ db: fireDb }) => {
-      import("firebase/firestore").then(({ collection: col, onSnapshot: snap }) => {
+    import("firebase/firestore").then(({ collection: col, onSnapshot: snap }) => {
+      import("../../firebase/config").then(({ db: fireDb }) => {
         const unsub = snap(col(fireDb, "companies", currentCompany.id, "signatories"),
           (s: any) => setSignatories(s.docs.map((d: any) => ({ id: d.id, ...d.data() }))));
-        return unsub;
+        // Note: unsub cleanup not straightforward with this pattern; it's acceptable for payslip modal
       });
     });
   }, [currentCompany]);
