@@ -13,7 +13,7 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
-import { ExportButton } from "../../components/ui/ExportButton";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 
 const statusColor: Record<POStatus, string> = {
   draft: "bg-slate-100 text-slate-600",
@@ -126,7 +126,7 @@ export const PurchaseOrdersPage: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "إدارة أوامر الشراء من الموردين" : "Manage purchase orders from suppliers"}</p>
         </div>
         <div className="flex items-center gap-2">
-          <ExportButton data={orders} filename="purchase-orders" headers={{ poNumber: "PO Number", supplierName: "Supplier", grandTotal: "Total", status: "Status" }} />
+          <ExportMenu data={orders} filename="purchase-orders" headers={{ poNumber: "PO Number", supplierName: "Supplier", grandTotal: "Total", status: "Status" }} />
 
           <button
             onClick={() => setShowPrint(true)}
