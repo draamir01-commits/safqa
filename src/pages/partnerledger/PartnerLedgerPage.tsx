@@ -80,7 +80,14 @@ export const PartnerLedgerPage: React.FC = () => {
           </h2>
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "كشف حساب تفصيلي لكل عميل أو مورد" : "Detailed statement of account per customer or supplier"}</p>
         </div>
-        {selectedId && <ExportMenu data={ledgerEntries} filename={`ledger-${selected?.name || "ledger"}`} headers={{ date: "Date", type: "Type", ref: "Reference", debit: "Debit", credit: "Credit", balance: "Balance" }} />}
+        <button
+            onClick={() => setShowPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-md bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {language === "ar" ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
+          </button>
+          {selectedId && <ExportMenu data={ledgerEntries} filename={`ledger-${selected?.name || "ledger"}`} headers={{ date: "Date", type: "Type", ref: "Reference", debit: "Debit", credit: "Credit", balance: "Balance" }} />}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -175,7 +182,7 @@ export const PartnerLedgerPage: React.FC = () => {
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
         title={language === "ar" ? "دفتر أستاذ الشركاء" : "Partner Ledger"}
-        itemCount={invoices?.length}
+        itemCount={ledgerEntries?.length}
       />
     </div>
   );
