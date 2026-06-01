@@ -12,7 +12,7 @@ import Button from "../../components/ui/Button";
 import Modal from "../../components/ui/Modal";
 import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
-import { ExportButton } from "../../components/ui/ExportButton";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 
 const statusColor: Record<string, string> = {
   active: "bg-emerald-100 text-emerald-700",
@@ -116,7 +116,7 @@ export const ProjectsPage: React.FC = () => {
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "إدارة المشاريع وتتبع الأرباح لكل مشروع" : "Manage projects and track per-project profitability"}</p>
         </div>
         <div className="flex gap-2">
-          <ExportButton data={projects} filename="projects" headers={{ name: "Name", clientName: "Client", contractValue: "Value", status: "Status" }} />
+          <ExportMenu data={projects} filename="projects" headers={{ name: "Name", clientName: "Client", contractValue: "Value", status: "Status" }} />
 
           <button
             onClick={() => setShowPrint(true)}
