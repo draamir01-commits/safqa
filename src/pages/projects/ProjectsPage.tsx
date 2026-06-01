@@ -1,10 +1,12 @@
 import * as React from "react";
-import { Plus, Eye, Briefcase, CheckCircle, PauseCircle, XCircle, Trash2, Printer, FileText, X} from "lucide-react";
+import { Plus, Eye, Briefcase, CheckCircle, PauseCircle, XCircle, Trash2, Printer, FileText, X, Paperclip} from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { AttachmentUploader } from "../../components/ui/AttachmentUploader";
+import { DocumentViewer } from "../../components/ui/DocumentViewer";
 import { listenCompanyCollection, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { formatCurrency } from "../../utils/formatters";
 import { Project, CustomerOrSupplier, Invoice, Expense } from "../../types";
@@ -33,6 +35,9 @@ export const ProjectsPage: React.FC = () => {
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [expenses, setExpenses] = React.useState<Expense[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<string[]>([]);
+  const [viewingDoc, setViewingDoc] = React.useState<{ url: string; fileName: string } | null>(null);
+
 
   // ── Export panel (same as invoices/quotations) ────────────────────────
   const [showExportPanel, setShowExportPanel] = React.useState(false);
@@ -112,6 +117,7 @@ export const ProjectsPage: React.FC = () => {
         vatPercent: vp, vatAmount: va, totalValue: cv + va,
         status: "active", startDate, endDate: endDate || null, description,
         createdBy: user.uid, createdAt: new Date(), updatedAt: new Date(),
+        attachments,
       });
       toast.success(language === "ar" ? "تم إنشاء المشروع" : "Project created");
       setShowForm(false);
@@ -131,7 +137,7 @@ export const ProjectsPage: React.FC = () => {
     toast.success(language === "ar" ? "تم الحذف" : "Deleted");
   };
 
-  const resetForm = () => { setName(""); setNameAr(""); setClientId(""); setContractValue(""); setDescription(""); setEndDate(""); };
+  const resetForm = () => { setName(""); setNameAr(""); setClientId(""); setContractValue(""); setDescription(""); setEndDate(""); setAttachments([]); };
 
   const statusLabel = (s: string) => {
     const map: Record<string, [string, string]> = {
@@ -250,6 +256,7 @@ export const ProjectsPage: React.FC = () => {
             </div>
           )}
           <Input label={language === "ar" ? "الوصف" : "Description"} value={description} onChange={e => setDescription(e.target.value)} placeholder={language === "ar" ? "اختياري" : "Optional"} />
+          <AttachmentUploader folder="projects" attachments={attachments} onChange={setAttachments} />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => { setShowForm(false); resetForm(); }}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
             <Button onClick={handleSave} loading={loading}>{language === "ar" ? "حفظ المشروع" : "Save Project"}</Button>
@@ -478,6 +485,13 @@ export const ProjectsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <DocumentViewer
+        isOpen={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        url={viewingDoc?.url || null}
+        fileName={viewingDoc?.fileName}
+      />
 
       <PrintManager
         isOpen={showPrint}
