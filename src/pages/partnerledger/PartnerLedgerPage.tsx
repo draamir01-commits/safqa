@@ -6,7 +6,7 @@ import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { Invoice, Bill, CustomerOrSupplier } from "../../types";
-import { ExportButton } from "../../components/ui/ExportButton";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 
 interface LedgerEntry { date: string; type: string; ref: string; debit: number; credit: number; balance: number; description: string; }
 
@@ -80,7 +80,7 @@ export const PartnerLedgerPage: React.FC = () => {
           </h2>
           <p className="text-sm text-slate-500 mt-1">{language === "ar" ? "كشف حساب تفصيلي لكل عميل أو مورد" : "Detailed statement of account per customer or supplier"}</p>
         </div>
-        {selectedId && <ExportButton data={ledgerEntries} filename={`ledger-${selected?.name}`} headers={{ date: "Date", type: "Type", ref: "Reference", debit: "Debit", credit: "Credit", balance: "Balance" }} />}
+        {selectedId && <ExportMenu data={ledgerEntries} filename={`ledger-${selected?.name || "ledger"}`} headers={{ date: "Date", type: "Type", ref: "Reference", debit: "Debit", credit: "Credit", balance: "Balance" }} />}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
