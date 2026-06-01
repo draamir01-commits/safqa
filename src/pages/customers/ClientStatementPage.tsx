@@ -523,10 +523,15 @@ export const ClientStatementPage: React.FC = () => {
                       const leftLines = [co?.address, co?.city ? co.city+", KSA":"", co?.phone, co?.vatNumber?"VAT: "+co.vatNumber:""].filter(Boolean).map((l:string)=>`<div style="font-size:7.5pt;color:#444;line-height:1.7">${l}</div>`).join("");
                       headerHTML = `<table style="width:100%;border-bottom:2px solid #e2e8f0;margin-bottom:12px;border-collapse:collapse"><tr><td style="width:38%;vertical-align:top;padding-bottom:10px"><div style="font-size:11pt;font-weight:700;margin-bottom:4px">${co?.name||""}</div>${leftLines}</td><td style="width:24%;text-align:center;vertical-align:middle">${expLogo && co?.logo ? `<img src="${co.logo}" style="max-height:55px;max-width:110px;object-fit:contain;display:block;margin:0 auto"/>` : ""}</td><td style="width:38%;text-align:right;vertical-align:top;padding-bottom:10px"><div style="font-family:Cairo,Arial,sans-serif;font-size:11pt;font-weight:700;direction:rtl;margin-bottom:4px">${co?.nameAr||co?.name||""}</div></td></tr></table>`;
                     }
-                    let footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;background:#fff;border-top:0.5px solid #e8ecf0;padding:5px 12mm;display:flex;justify-content:space-between;font-size:7pt;color:#888;z-index:10"><span>${co?.name||""}</span><span>Client Statement</span><span>${new Date().toLocaleDateString()}</span></div>`;
+                    const pgLine = `<div style="display:flex;justify-content:space-between;padding:4px 12mm;font-size:7pt;color:#888;border-top:0.5px solid #e8ecf0"><span>${co?.name||""}</span><span>Client Statement</span><span>${new Date().toLocaleDateString()}</span></div>`;
+                    let footerHTML = "";
                     if (expLHMode === "header" && footerUrl) {
-                      footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:5;background:#fff"><div style="padding:4px 12mm;border-top:0.5px solid #e8ecf0;display:flex;justify-content:space-between;font-size:7pt;color:#888"><span>${co?.name||""}</span><span>${new Date().toLocaleDateString()}</span></div><img src="${footerUrl}" style="width:100%;max-height:25mm;object-fit:cover;display:block"/></div>`;
+                      // Text line ABOVE the footer image — same as InvoicesPage
+                      footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:5;background:#fff">${pgLine}<div style="line-height:0"><img src="${footerUrl}" style="width:100%;max-height:25mm;object-fit:cover;display:block"/></div></div>`;
                       padBot = "32mm";
+                    } else {
+                      // No footer image — simple text bar
+                      footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;background:#fff;z-index:10">${pgLine}</div>`;
                     }
                     // ── Build professional client statement PDF ──
                     const cl = selectedClient as any;
