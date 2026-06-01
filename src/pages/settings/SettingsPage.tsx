@@ -116,6 +116,8 @@ export const SettingsPage: React.FC = () => {
   const [newLHName, setNewLHName] = React.useState("");
   const [newLHUrl, setNewLHUrl] = React.useState("");
   const [footerAssetUrl, setFooterAssetUrl] = React.useState("");
+  const [headerAssetUrl, setHeaderAssetUrl] = React.useState("");
+  const headerAssetFileRef = React.useRef<HTMLInputElement>(null);
   const [lhSaving, setLhSaving] = React.useState(false);
 
   // Equity share
@@ -168,6 +170,7 @@ export const SettingsPage: React.FC = () => {
     setFiscalYearStart(currentCompany.fiscalYearStart || "01-01");
     setAdditionalLetterheads((currentCompany as any).additionalLetterheads || []);
     setFooterAssetUrl((currentCompany as any).footerAsset || "");
+    setHeaderAssetUrl((currentCompany as any).headerAsset || "");
     setFullLetterhead((currentCompany as any).fullLetterhead || "");
     setEquityPartners((currentCompany as any).equityPartners || []);
     setStampUrl((currentCompany as any).stamp || "");
@@ -248,6 +251,7 @@ export const SettingsPage: React.FC = () => {
       await updateCompany(currentCompany.id, {
         additionalLetterheads,
         footerAsset: footerAssetUrl,
+        headerAsset: headerAssetUrl,
         fullLetterhead,
       } as any);
       toast.success(language === "ar" ? "تم حفظ الترويسات" : "Letterheads saved");
@@ -767,6 +771,48 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* ── Header Asset ── */}
+              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5 text-brand-primary" />
+                  {language === "ar" ? "صورة رأس الصفحة" : "Header Asset"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {language === "ar" ? "صورة عرضية تظهر أعلى المستندات المصدرة (Header + Footer مود)" : "Full-width banner image at top of documents (used in Header + Footer mode)"}
+                </p>
+                <div
+                  onClick={() => headerAssetFileRef.current?.click()}
+                  className="flex items-center gap-4 p-4 border border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-brand-primary hover:bg-blue-50/30 transition-colors"
+                >
+                  {headerAssetUrl ? (
+                    <img src={headerAssetUrl} alt="header" className="h-14 w-full object-cover rounded-lg border border-slate-200" />
+                  ) : (
+                    <div className="w-full h-14 bg-slate-100 rounded-lg border border-slate-200 flex items-center justify-center gap-2 text-slate-400">
+                      <Upload className="h-5 w-5" />
+                      <span className="text-sm">{language === "ar" ? "انقر لرفع صورة الرأس" : "Click to upload header image"}</span>
+                    </div>
+                  )}
+                  <input
+                    ref={headerAssetFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const b64 = await fileToBase64(file);
+                      setHeaderAssetUrl(b64);
+                    }}
+                  />
+                </div>
+                {headerAssetUrl && (
+                  <button onClick={() => setHeaderAssetUrl("")} className="text-xs text-red-500 hover:underline flex items-center gap-1">
+                    <X className="h-3 w-3" />{language === "ar" ? "إزالة صورة الرأس" : "Remove header image"}
+                  </button>
+                )}
+              </div>
+
+              {/* ── Footer Asset ── */}
               <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
                   <ImageIcon className="h-5 w-5 text-brand-primary" />
