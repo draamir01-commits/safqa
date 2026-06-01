@@ -41,7 +41,7 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
 }) => {
   const { language } = useUIStore();
   const { currentCompany } = useCompanyStore();
-  const [step, setStep] = React.useState<"options" | "printing">("options");
+  const [step, setStep] = React.useState<"options" | "printing" | "pdf_generating">("options");
 
   // Branding options
   const [includeLetterhead, setIncludeLetterhead] = React.useState(false);
@@ -72,20 +72,17 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
 
   const selectedSig = signatories.find(s => s.id === selectedSigId);
 
-  const handlePrint = () => {
-    setStep("printing");
-    const options: PrintOptions = {
-      includeLetterhead, selectedLetterheadId,
-      includeLogo, includeStamp,
-      selectedSignatoryId: selectedSigId,
-      includeSignature,
-    };
+  const buildOptions = (): PrintOptions => ({
+    includeLetterhead, selectedLetterheadId,
+    includeLogo, includeStamp,
+    selectedSignatoryId: selectedSigId,
+    includeSignature,
+  });
 
-    // Apply print CSS variables for the page
+  const applyPrintCSS = () => {
     const styleId = "safqa-print-options";
     let style = document.getElementById(styleId) as HTMLStyleElement;
     if (!style) { style = document.createElement("style"); style.id = styleId; document.head.appendChild(style); }
-
     style.textContent = `
       @media print {
         .print-hide { display: none !important; }
@@ -95,16 +92,34 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
         .print-signatory { display: ${selectedSigId ? "block" : "none"} !important; }
       }
     `;
+  };
 
+  const handlePrint = () => {
+    setStep("printing");
+    applyPrintCSS();
     setTimeout(() => {
       window.focus();
-      if (onConfirm) onConfirm(options);
+      if (onConfirm) onConfirm(buildOptions());
       const prevTitle = document.title;
       document.title = title;
       window.print();
       document.title = prevTitle;
       setTimeout(() => { setStep("options"); onClose(); }, 1500);
     }, 500);
+  };
+
+  const handleSaveAsPDF = () => {
+    setStep("pdf_generating");
+    applyPrintCSS();
+    setTimeout(() => {
+      window.focus();
+      if (onConfirm) onConfirm(buildOptions());
+      const prevTitle = document.title;
+      document.title = title;
+      window.print();
+      document.title = prevTitle;
+      setTimeout(() => { setStep("options"); onClose(); }, 1500);
+    }, 400);
   };
 
   if (!isOpen) return null;
@@ -135,10 +150,14 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
             </div>
           </div>
 
-          {step === "printing" ? (
+          {(step === "printing" || step === "pdf_generating") ? (
             <div className="flex items-center justify-center gap-3 py-6 text-brand-primary">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span className="text-sm font-medium">{language === "ar" ? "جاري فتح الطباعة..." : "Opening print dialog..."}</span>
+              <span className="text-sm font-medium">
+                {step === "pdf_generating"
+                  ? (language === "ar" ? "\u062c\u0627\u0631\u064a \u0641\u062a\u062d \u0645\u0631\u0628\u0639 \u0627\u0644\u0637\u0628\u0627\u0639\u0629... \u0627\u062e\u062a\u0631 \u00abCopy as PDF\u00bb" : "Opening print dialog... select Save as PDF")
+                  : (language === "ar" ? "جاري فتح الطباعة..." : "Opening print dialog...")}
+              </span>
             </div>
           ) : (
             <>
@@ -235,15 +254,20 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3 pt-1">
+              <div className="flex gap-2 pt-1">
                 <button onClick={onClose}
-                  className="flex-1 py-2.5 text-sm font-semibold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors">
+                  className="py-2.5 px-4 text-sm font-semibold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors">
                   {language === "ar" ? "إلغاء" : "Cancel"}
                 </button>
                 <button onClick={handlePrint}
-                  className="flex-1 py-2.5 text-sm font-semibold bg-slate-900 text-white rounded-xl hover:bg-brand-primary transition-colors flex items-center justify-center gap-2">
+                  className="flex-1 py-2.5 text-sm font-semibold bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors flex items-center justify-center gap-2">
                   <Printer className="h-4 w-4" />
                   {language === "ar" ? "طباعة" : "Print"}
+                </button>
+                <button onClick={handleSaveAsPDF}
+                  className="flex-1 py-2.5 text-sm font-semibold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  {language === "ar" ? "حفظ PDF" : "Save as PDF"}
                 </button>
               </div>
             </>
