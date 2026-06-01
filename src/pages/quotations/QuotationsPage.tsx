@@ -11,6 +11,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { ExportMenu } from "../../components/ui/ExportMenu";
 import {
   listenCompanyCollection, addDocument, updateDocument,
   deleteDocument, getNextInvoiceNumber, saveInvoice,
@@ -893,6 +894,11 @@ window.onload=function(){setTimeout(function(){window.print()},1200)};
           <p className="text-sm text-slate-500 mt-0.5">{language==="ar"?"إنشاء وإدارة عروض الأسعار":"Create and manage quotations with revision tracking"}</p>
         </div>
         <div className="flex items-center gap-2">
+          <ExportMenu
+            data={filtered.map(q => ({ quotationNumber: q.quotationNumber, customer: q.customerName, project: (q as any).projectName||"", date: q.issueDate, status: q.status, total: q.grandTotal }))}
+            filename="quotations"
+            headers={{ quotationNumber: "Quotation #", customer: "Customer", project: "Project", date: "Date", status: "Status", total: "Total" }}
+          />
           <button
             onClick={() => {
               // Open window first to avoid popup blocker
