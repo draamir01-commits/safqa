@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, ArrowLeft, Save, Sparkles } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Save, Sparkles, List, Pencil } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
@@ -55,6 +55,22 @@ export const NewInvoicePage: React.FC = () => {
   const [lines, setLines] = React.useState<LineItem[]>([
     { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }
   ]);
+  // Per-line input mode: "select" = pick from products list, "manual" = type freely
+  const [lineModes, setLineModes] = React.useState<("select"|"manual")[]>(["select"]);
+
+  const toggleLineMode = (idx: number) => {
+    setLineModes(prev => {
+      const next = [...prev];
+      next[idx] = next[idx] === "select" ? "manual" : "select";
+      return next;
+    });
+    // Clear product link when switching to manual
+    setLines(prev => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], productId: "" };
+      return updated;
+    });
+  };
 
   // Seed databases listing
   React.useEffect(() => {
@@ -92,15 +108,28 @@ export const NewInvoicePage: React.FC = () => {
   }, [lines]);
 
   const handleAddLine = () => {
-    setLines([
-      ...lines,
-      { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }
-    ]);
+    setLines(prev => [...prev, { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
+    setLineModes(prev => [...prev, "select"]);
   };
 
   const handleDeleteLine = (idx: number) => {
     if (lines.length === 1) return;
-    setLines(lines.filter((_, i) => i !== idx));
+    setLines(prev => prev.filter((_, i) => i !== idx));
+    setLineModes(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleManualFieldChange = (idx: number, field: "name" | "nameAr" | "unit" | "vatRate", value: string | number) => {
+    setLines(prev => {
+      const updated = [...prev];
+      if (field === "vatRate") {
+        const vr = Number(value);
+        const calc = calculateLineItem(updated[idx].qty, updated[idx].unitPrice, updated[idx].discountPercent, vr);
+        updated[idx] = { ...updated[idx], vatRate: vr, vatAmount: calc.vatAmount, lineTotal: calc.lineTotal };
+      } else {
+        updated[idx] = { ...updated[idx], [field]: value };
+      }
+      return updated;
+    });
   };
 
   const handleProductSelect = (idx: number, prodId: string) => {
@@ -158,8 +187,8 @@ export const NewInvoicePage: React.FC = () => {
       return;
     }
 
-    if (lines.some(l => !l.productId)) {
-      toast.error(language === "ar" ? "يرجى تحديد تفاصيل وصنف كل سطر مبيعات" : "Please specify a product for all lines");
+    if (lines.some(l => !l.name?.trim())) {
+      toast.error(language === "ar" ? "يرجى إدخال اسم المنتج/الخدمة في كل سطر" : "Please enter a product/service name for all lines");
       return;
     }
 
@@ -388,15 +417,81 @@ export const NewInvoicePage: React.FC = () => {
               {lines.map((line, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/50">
                   <td className="px-3 py-2.5">
-                    <Select
-                      options={[
-                        { value: "", label: language === "ar" ? "تحديد المادة" : "Select Item" },
-                        ...products.map(p => ({ value: p.id, label: language === "ar" ? p.nameAr : p.name }))
-                      ]}
-                      value={line.productId}
-                      onChange={(e) => handleProductSelect(idx, e.target.value)}
-                      className="py-1 px-2 border-slate-250 text-xs"
-                    />
+                    <div className="flex flex-col gap-1.5">
+                      {/* Mode toggle */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => { if ((lineModes[idx]||"select") !== "select") toggleLineMode(idx); }}
+                          className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${(lineModes[idx]||"select") === "select" ? "bg-brand-primary text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                        >
+                          <List className="h-2.5 w-2.5" />
+                          {language === "ar" ? "قائمة" : "List"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { if ((lineModes[idx]||"select") !== "manual") toggleLineMode(idx); }}
+                          className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${(lineModes[idx]||"select") === "manual" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                          {language === "ar" ? "يدوي" : "Manual"}
+                        </button>
+                      </div>
+
+                      {/* Select mode */}
+                      {(lineModes[idx]||"select") === "select" && (
+                        <Select
+                          options={[
+                            { value: "", label: language === "ar" ? "— اختر منتجاً —" : "— Select product —" },
+                            ...products.map(p => ({ value: p.id, label: language === "ar" ? (p.nameAr||p.name) : p.name }))
+                          ]}
+                          value={line.productId}
+                          onChange={(e) => handleProductSelect(idx, e.target.value)}
+                          className="py-1 px-2 border-slate-250 text-xs"
+                        />
+                      )}
+
+                      {/* Manual mode */}
+                      {(lineModes[idx]||"select") === "manual" && (
+                        <div className="flex flex-col gap-1">
+                          <input
+                            type="text"
+                            placeholder={language === "ar" ? "اسم المنتج/الخدمة" : "Product / Service name"}
+                            className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:border-emerald-400"
+                            value={line.name}
+                            onChange={e => handleManualFieldChange(idx, "name", e.target.value)}
+                          />
+                          <input
+                            type="text"
+                            placeholder={language === "ar" ? "الاسم بالعربي (اختياري)" : "Arabic name (optional)"}
+                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-emerald-400 text-right"
+                            value={line.nameAr||""}
+                            onChange={e => handleManualFieldChange(idx, "nameAr", e.target.value)}
+                            dir="rtl"
+                          />
+                          <div className="flex items-center gap-1">
+                            <select
+                              className="flex-1 px-1.5 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-emerald-400"
+                              value={line.unit||"PCE"}
+                              onChange={e => handleManualFieldChange(idx, "unit", e.target.value)}
+                            >
+                              {["PCE","KG","LTR","MTR","HR","DAY","SRV","SET","BOX","TON","M2","M3"].map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                            <select
+                              className="w-16 px-1.5 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:border-emerald-400"
+                              value={line.vatRate}
+                              onChange={e => handleManualFieldChange(idx, "vatRate", Number(e.target.value))}
+                            >
+                              <option value={0}>0%</option>
+                              <option value={5}>5%</option>
+                              <option value={15}>15%</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 w-24">
                     <input
