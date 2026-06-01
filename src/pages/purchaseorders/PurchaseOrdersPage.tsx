@@ -1,10 +1,12 @@
 import * as React from "react";
-import { Plus, Eye, ShoppingCart, CheckCircle, XCircle, Trash2, Package, Printer, List, Pencil, FileText, X} from "lucide-react";
+import { Plus, Eye, ShoppingCart, CheckCircle, XCircle, Trash2, Package, Printer, List, Pencil, FileText, X, Paperclip} from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { AttachmentUploader } from "../../components/ui/AttachmentUploader";
+import { DocumentViewer } from "../../components/ui/DocumentViewer";
 import { listenCompanyCollection, addDocument, updateDocument, deleteDocument } from "../../firebase/firestore";
 import { formatCurrency } from "../../utils/formatters";
 import { calculateLineItem, calculateTotals } from "../../utils/vatCalculator";
@@ -34,6 +36,9 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [suppliers, setSuppliers] = React.useState<CustomerOrSupplier[]>([]);
   const [products, setProducts] = React.useState<Product[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<string[]>([]);
+  const [viewingDoc, setViewingDoc] = React.useState<{ url: string; fileName: string } | null>(null);
+
 
   // ── Export panel (same as invoices/quotations) ────────────────────────
   const [showExportPanel, setShowExportPanel] = React.useState(false);
@@ -159,6 +164,7 @@ export const PurchaseOrdersPage: React.FC = () => {
         lineItems: lines, ...totals,
         currency: "SAR", notes,
         createdBy: user.uid, createdAt: new Date(), updatedAt: new Date(),
+        attachments,
       });
       toast.success(language === "ar" ? "تم إنشاء أمر الشراء" : "Purchase order created");
       setShowForm(false);
@@ -183,7 +189,7 @@ export const PurchaseOrdersPage: React.FC = () => {
   };
 
   const resetForm = () => {
-    setSupplierId(""); setNotes("");
+    setSupplierId(""); setNotes(""); setAttachments([]);
     setLines([{ productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
     setLineModes(["select"]);
     setLineUnits(["PCE"]);
@@ -413,6 +419,7 @@ export const PurchaseOrdersPage: React.FC = () => {
             <div className="flex justify-between text-slate-600"><span>{language === "ar" ? "ضريبة القيمة المضافة" : "VAT"}</span><span>{formatCurrency(totals.totalVat, language)}</span></div>
             <div className="flex justify-between font-bold text-slate-800 text-base border-t border-slate-200 pt-1"><span>{language === "ar" ? "الإجمالي" : "Total"}</span><span>{formatCurrency(totals.grandTotal, language)}</span></div>
           </div>
+          <AttachmentUploader folder="purchase-orders" attachments={attachments} onChange={setAttachments} />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => { setShowForm(false); resetForm(); }}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
             <Button onClick={handleSave} loading={loading}>{language === "ar" ? "حفظ أمر الشراء" : "Save Purchase Order"}</Button>
@@ -646,6 +653,13 @@ export const PurchaseOrdersPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <DocumentViewer
+        isOpen={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        url={viewingDoc?.url || null}
+        fileName={viewingDoc?.fileName}
+      />
 
       <PrintManager
         isOpen={showPrint}
