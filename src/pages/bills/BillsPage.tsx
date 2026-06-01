@@ -1,12 +1,14 @@
 import * as React from "react";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, Printer, FileText, X} from "lucide-react";
+import { Plus, Trash2, Printer, FileText, X, Paperclip} from "lucide-react";
 import toast from "react-hot-toast";
 
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { AttachmentUploader } from "../../components/ui/AttachmentUploader";
+import { DocumentViewer } from "../../components/ui/DocumentViewer";
 import { listenCompanyCollection, saveBill, deleteDocument } from "../../firebase/firestore";
 import { Bill, CustomerOrSupplier } from "../../types";
 
@@ -72,6 +74,9 @@ export const BillsPage: React.FC = () => {
 
   const [showPrint, setShowPrint] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<string[]>([]);
+  const [viewingDoc, setViewingDoc] = React.useState<{ url: string; fileName: string } | null>(null);
+
 
   // Form Fields
   const [billNumber, setBillNumber] = React.useState("");
@@ -129,7 +134,8 @@ export const BillsPage: React.FC = () => {
         vatAmount: totalVat,
         totalAmount,
         status: "unpaid",
-        notes: ""
+        notes: "",
+        attachments,
       });
 
       toast.success(language === "ar" ? "تم تسجيل فاتورة الشراء بنجاح" : "Supplier bill recorded successfully");
@@ -158,6 +164,7 @@ export const BillsPage: React.FC = () => {
     setBillNumber("");
     setSupplierId("");
     setAmountBeforeVat("");
+    setAttachments([]);
     setVatAmount("");
     setVatRate(15);
   };
@@ -166,7 +173,18 @@ export const BillsPage: React.FC = () => {
     {
       header: language === "ar" ? "فاتورة الشراء" : "Bill Number",
       render: (row) => (
-        <span className="font-bold text-slate-800">{row.billNumber}</span>
+        <div className="flex flex-col">
+          <span className="font-bold text-slate-800">{row.billNumber}</span>
+          {(row as any).attachments?.length > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); setViewingDoc({ url: (row as any).attachments[0], fileName: `bill-${row.billNumber}` }); }}
+              className="flex items-center gap-1 text-[10px] text-brand-primary hover:underline mt-0.5"
+            >
+              <Paperclip className="h-3 w-3" />
+              {(row as any).attachments.length} {language === "ar" ? "مرفق" : "attachment(s)"}
+            </button>
+          )}
+        </div>
       )
     },
     {
@@ -311,6 +329,7 @@ export const BillsPage: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t mt-2">
+          <AttachmentUploader folder="bills" attachments={attachments} onChange={setAttachments} />
             <Button variant="secondary" size="sm" type="button" onClick={() => setModalOpen(false)}>
               {t("common.cancel")}
             </Button>
@@ -512,6 +531,13 @@ export const BillsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <DocumentViewer
+        isOpen={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        url={viewingDoc?.url || null}
+        fileName={viewingDoc?.fileName}
+      />
 
       <PrintManager
         isOpen={showPrint}
