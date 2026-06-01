@@ -1,10 +1,12 @@
 import * as React from "react";
-import { Plus, Eye, Truck, CheckCircle, Trash2, FileText, Printer, X, List, Pencil } from "lucide-react";
+import { Plus, Eye, Truck, CheckCircle, Trash2, FileText, Printer, X, List, Pencil, Paperclip} from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
+import { AttachmentUploader } from "../../components/ui/AttachmentUploader";
+import { DocumentViewer } from "../../components/ui/DocumentViewer";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { db } from "../../firebase/config";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -31,6 +33,9 @@ export const DeliveryNotesPage: React.FC = () => {
   const [customers, setCustomers] = React.useState<CustomerOrSupplier[]>([]);
   const [invoices, setInvoices] = React.useState<Invoice[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<string[]>([]);
+  const [viewingDoc, setViewingDoc] = React.useState<{ url: string; fileName: string } | null>(null);
+
   const [showPrint, setShowPrint] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
@@ -148,6 +153,7 @@ export const DeliveryNotesPage: React.FC = () => {
   const resetForm = () => {
     setCustomerId(""); setInvoiceId(""); setDeliveryAddress(""); setDriverName(""); setFormNotes("");
     setItems([{ name: "", nameAr: "", qty: 1, unit: "PCE" }]);
+    setAttachments([]);
   };
 
   const statusLabel = (s: string) => {
@@ -323,6 +329,8 @@ export const DeliveryNotesPage: React.FC = () => {
           </div>
 
           <Input label={language === "ar" ? "ملاحظات" : "Notes"} value={formNotes} onChange={e => setFormNotes(e.target.value)} />
+
+          <AttachmentUploader folder="delivery-notes" attachments={attachments} onChange={setAttachments} />
 
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => { setShowForm(false); resetForm(); }}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
@@ -504,6 +512,13 @@ export const DeliveryNotesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <DocumentViewer
+        isOpen={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+        url={viewingDoc?.url || null}
+        fileName={viewingDoc?.fileName}
+      />
 
       <PrintManager
         isOpen={showPrint}
