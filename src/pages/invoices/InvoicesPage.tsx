@@ -14,6 +14,7 @@ import { listenCompanyCollection, updateDocument, deleteDocument } from "../../f
 import { db } from "../../firebase/config";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { generateZatcaQrHtmlCanvas, generateQRDataURL, encodeTLV } from "../../utils/zatca/qrEncoder";
+import { renderInvoiceTemplate, INVOICE_TEMPLATES, type TemplateId } from "../../utils/invoiceTemplates";
 import { processPhase1Invoice } from "../../utils/zatca/phase1";
 import { formatCurrency, formatDate } from "../../utils/formatters";
 import { Invoice, InvoiceStatus, ZatcaStatus } from "../../types";
@@ -50,6 +51,7 @@ export const InvoicesPage: React.FC = () => {
   const [expSignatories, setExpSignatories] = React.useState<any[]>([]);
   const [expLetterheads, setExpLetterheads] = React.useState<any[]>([]);
   const [expGenerating, setExpGenerating] = React.useState(false);
+  const [expTemplate, setExpTemplate] = React.useState<TemplateId>("classic");
 
     // Reset signatories when panel closes
   React.useEffect(() => {
@@ -1075,11 +1077,53 @@ export const InvoicesPage: React.FC = () => {
                   setExpGenerating(true);
                   setShowExportPanel(false);
                   try {
-                    const html = await exportInvoicePDF(exportingInvoice, qrDataUrl, {
+                    const classicHtml = await exportInvoicePDF(exportingInvoice, qrDataUrl, {
                       lhMode: expLHMode, lhId: expLHId,
                       logo: expLogo, stamp: expStamp,
                       sigId: expSigId, includeSig: expIncludeSig,
                     });
+                    let html: string;
+                    if (expTemplate === "classic") {
+                      html = classicHtml as string;
+                    } else {
+                      const co2 = currentCompany as any;
+                      const lhList2 = expLetterheads.length > 0 ? expLetterheads : [{ id: "primary", url: co2?.fullLetterhead || "" }];
+                      const selLH2 = lhList2.find((l: any) => l.id === expLHId) || lhList2[0];
+                      const lhImgUrl2 = selLH2?.url || co2?.fullLetterhead || "";
+                      const headerImgUrl2 = co2?.headerAsset || co2?.letterheadHeader || "";
+                      const footerImgUrl2 = co2?.footerAsset || co2?.letterheadFooter || "";
+                      const sigObj2 = expSignatories.find((s: any) => s.id === expSigId) || null;
+                      const isSub2 = exportingInvoice.type === "simplified";
+                      let padTop2 = "12mm", padBot2 = "22mm";
+                      let hHTML2 = "";
+                      if (expLHMode === "full" && lhImgUrl2) {
+                        hHTML2 = `<div style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1"><img src="${lhImgUrl2}" style="width:100%;height:100%;object-fit:fill"/></div>`;
+                        padTop2 = "48mm";
+                      } else if (expLHMode === "header") {
+                        const hUrl2 = headerImgUrl2 || lhImgUrl2;
+                        if (hUrl2) { hHTML2 = `<div style="position:fixed;top:0;left:0;width:100%;z-index:5;line-height:0"><img src="${hUrl2}" style="width:100%;max-height:50mm;object-fit:cover;display:block"/></div>`; padTop2 = "55mm"; }
+                      } else {
+                        const ll2 = [co2?.address||"",co2?.city?co2.city+", KSA":"",co2?.email||"",co2?.phone||"",co2?.vatNumber?"VAT: "+co2.vatNumber:"",co2?.crNumber?"CR: "+co2.crNumber:""].filter(Boolean).map((l:string)=>`<div style="font-size:7.5pt;color:#444;line-height:1.7">${l}</div>`).join("");
+                        hHTML2 = `<table style="width:100%;border-bottom:2px solid #e2e8f0;margin-bottom:10px;border-collapse:collapse"><tr><td style="width:38%;vertical-align:top;padding-bottom:10px"><div style="font-size:11pt;font-weight:700;margin-bottom:4px">${co2?.name||""}</div>${ll2}</td><td style="width:24%;text-align:center;vertical-align:middle;padding:0 8px 10px">${expLogo && co2?.logo ? `<img src="${co2.logo}" style="max-height:55px;max-width:110px;object-fit:contain;display:block;margin:0 auto"/>` : ""}</td><td style="width:38%;text-align:right;vertical-align:top;padding-bottom:10px"><div style="font-family:Cairo,Arial,sans-serif;font-size:11pt;font-weight:700;direction:rtl;margin-bottom:4px">${co2?.nameAr||""}</div></td></tr></table>`;
+                      }
+                      const pgNum2 = `<div style="display:flex;justify-content:space-between;font-size:7pt;color:#888"><span>${co2?.name||""}</span><span>Page 1 of 1 - ${exportingInvoice.invoiceNumber}</span><span>${exportingInvoice.invoiceNumber}</span></div>`;
+                      let fHTML2 = "";
+                      if (expLHMode === "header" && footerImgUrl2) {
+                        fHTML2 = `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:5;background:#fff"><div style="padding:4px 0;border-top:0.5px solid #e8ecf0">${pgNum2}</div><div style="line-height:0"><img src="${footerImgUrl2}" style="width:100%;max-height:25mm;object-fit:cover;display:block"/></div></div>`;
+                        padBot2 = "32mm";
+                      } else {
+                        fHTML2 = `<div style="position:fixed;bottom:0;left:0;width:100%;background:#fff;border-top:0.5px solid #e8ecf0;padding:5px 0 6px;z-index:10">${pgNum2}</div>`;
+                      }
+                      const sigH2 = sigObj2 ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px"><div style="flex:1"><div style="font-size:9pt;font-weight:700;margin-bottom:12px">Authorized Signatory</div>${expIncludeSig && sigObj2.signatureUrl ? `<img src="${sigObj2.signatureUrl}" style="height:36px;max-width:100px;object-fit:contain;display:block;margin-bottom:6px"/>` : "<div style='height:36px'></div>"}<div style="border-bottom:1.5px solid #333;width:160px;margin-bottom:5px"></div><div style="font-size:9.5pt;font-weight:700">${sigObj2.name}</div><div style="font-size:8pt;color:#555">${sigObj2.designation||""}</div></div>${expStamp && co2?.stamp ? `<div style="text-align:center"><img src="${co2.stamp}" style="width:90px;height:90px;object-fit:contain"/><div style="font-size:7pt;color:#888;margin-top:4px">Company Stamp</div></div>` : ""}</div>` : "";
+                      html = renderInvoiceTemplate(expTemplate, {
+                        inv: exportingInvoice, co: co2, qrUrl: qrDataUrl,
+                        headerHTML: hHTML2, footerHTML: fHTML2,
+                        padTop: padTop2, padBot: padBot2, sigHTML: sigH2,
+                        titleEN: isSub2 ? "Simplified Tax Invoice" : "Tax Invoice",
+                        titleAR: isSub2 ? "\u0641\u0627\u062a\u0648\u0631\u0629 \u0636\u0631\u064a\u0628\u064a\u0629 \u0645\u0628\u0633\u0637\u0629" : "\u0641\u0627\u062a\u0648\u0631\u0629 \u0636\u0631\u064a\u0628\u064a\u0629",
+                        includeLogo: expLogo,
+                      });
+                    }
                     win.document.open();
                     win.document.write(html as string);
                     win.document.close();
