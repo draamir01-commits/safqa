@@ -1053,6 +1053,27 @@ export const InvoicesPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Document Template selector */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">
+                  {language === "ar" ? "قالب المستند" : "Document Template"}
+                </p>
+                <div className="space-y-2">
+                  {INVOICE_TEMPLATES.map(t => (
+                    <label key={t.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${expTemplate === t.id ? "border-brand-primary bg-blue-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"}`}>
+                      <input type="radio" name="invTemplate" checked={expTemplate === t.id} onChange={() => setExpTemplate(t.id)} className="text-brand-primary" />
+                      <div className="flex items-center gap-2.5 flex-1">
+                        <div className="w-5 h-5 rounded shrink-0" style={{ background: t.accent }} />
+                        <div>
+                          <div className="text-xs font-semibold text-slate-700">{t.label}</div>
+                          <div className="text-[10px] text-slate-400">{t.description}</div>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               {/* Preview strip */}
               {(expLHMode !== "none" || expLogo || expStamp || expSigId) && (
                 <div className="bg-slate-900 rounded-xl p-3 text-[10px] text-slate-400 space-y-1">
