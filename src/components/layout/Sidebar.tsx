@@ -102,13 +102,25 @@ export const Sidebar: React.FC = () => {
       style={{ width: collapsed ? "56px" : "224px" }}
     >
       {/* Header */}
-      <div className="px-3 py-4 flex items-center justify-between border-b border-[#1E293B] bg-[#090D16] shrink-0">
+      <div className="px-3 py-4 flex items-center justify-between border-b border-[#1E293B] bg-[#060B18] shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="h-7 w-7 rounded-lg bg-brand-primary flex items-center justify-center font-bold text-white text-sm shrink-0">ص</div>
+          {/* Prism mark — Navy + Lime */}
+          <svg width={collapsed ? 28 : 32} height={collapsed ? 31 : 35} viewBox="0 0 64 72" style={{ flexShrink: 0 }}>
+            <polygon points="32,2 60,18 60,50 32,66 4,50 4,18" fill="#0F2D6B" />
+            <polygon points="32,2 60,18 32,34"                 fill="#071A45" />
+            <polygon points="32,34 60,18 60,50 32,66"           fill="#B8F400" />
+            <polygon points="4,18 32,34 32,66 4,50"             fill="#94C700" />
+            <polygon points="32,2 32,34 4,18"                   fill="#1A4490" />
+          </svg>
           {!collapsed && (
             <div className="min-w-0">
-              <h1 className="font-bold text-sm text-white tracking-wide leading-tight">Safqa</h1>
-              <p className="text-[9px] text-emerald-500 font-medium truncate">{currentCompany?.nameAr || currentCompany?.name || "صفقة"}</p>
+              <div style={{ fontFamily: "Georgia,serif", fontSize: 16, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1, color: "#fff" }}>
+                <span style={{ fontStyle: "italic", color: "#B8F400" }}>S</span>afqa
+              </div>
+              <div style={{ fontFamily: "Cairo,Arial,sans-serif", fontSize: 10, direction: "rtl", marginTop: 2 }}>
+                <span style={{ fontWeight: 200, color: "rgba(255,255,255,0.4)" }}>صف</span>
+                <span style={{ fontWeight: 900, color: "#B8F400" }}>قة</span>
+              </div>
             </div>
           )}
         </div>
