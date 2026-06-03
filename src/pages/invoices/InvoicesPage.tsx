@@ -10,7 +10,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useUIStore } from "../../stores/uiStore";
 import { PrintManager } from "../../components/ui/PrintManager";
 
-import { listenCompanyCollection, updateDocument, deleteDocument } from "../../firebase/firestore";
+import { listenCompanyCollection, updateDocument, deleteDocument, addDocument } from "../../firebase/firestore";
 import { db } from "../../firebase/config";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { generateZatcaQrHtmlCanvas, generateQRDataURL, encodeTLV } from "../../utils/zatca/qrEncoder";
@@ -445,6 +445,68 @@ export const InvoicesPage: React.FC = () => {
         grandTotal,
         updatedAt: new Date(),
       });
+
+      // ── Auto-record income when payment is added or updated ──────────────
+      const prevAmountPaid = editingInvoice.amountPaid || 0;
+      if (amountPaidNum > 0 && amountPaidNum !== prevAmountPaid) {
+        try {
+          // Check if an income record already exists for this invoice
+          const { getDocs: gd2, query: q2, collection: col2, where: w2 } =
+            await import("firebase/firestore").then(m => m);
+          const existingSnap = await gd2(q2(
+            col2(db, "companies", currentCompany.id, "income"),
+            w2("invoiceId", "==", editingInvoice.id)
+          ));
+
+          const vatRate = recalcLines[0]?.vatRate ?? 15;
+          const net = Math.round((amountPaidNum / (1 + vatRate / 100)) * 100) / 100;
+          const vatAmt = Math.round((amountPaidNum - net) * 100) / 100;
+          const isPartial = amountPaidNum < grandTotal;
+          const descEn = isPartial
+            ? `Partial payment — ${editingInvoice.invoiceNumber}`
+            : `Payment received — ${editingInvoice.invoiceNumber}`;
+          const descAr = isPartial
+            ? `\u062f\u0641\u0639\u0629 \u062c\u0632\u0626\u064a\u0629 \u2014 ${editingInvoice.invoiceNumber}`
+            : `\u062a\u0645 \u0627\u0633\u062a\u0644\u0627\u0645 \u0627\u0644\u062f\u0641\u0639\u0629 \u2014 ${editingInvoice.invoiceNumber}`;
+
+          const incomeData = {
+            date: editIssueDate,
+            description: descEn,
+            descriptionAr: descAr,
+            clientId: editingInvoice.customerId || null,
+            clientName: editCustomerName || null,
+            category: "Sales",
+            amount: net,
+            vatPercent: vatRate,
+            vatAmount: vatAmt,
+            totalAmount: amountPaidNum,
+            vatInclusive: false,
+            paymentMethod: "Bank Transfer",
+            receiptNo: editingInvoice.invoiceNumber,
+            invoiceId: editingInvoice.id,
+            invoiceNumber: editingInvoice.invoiceNumber,
+            notes: `Auto-recorded from invoice ${editingInvoice.invoiceNumber}`,
+            updatedAt: new Date(),
+          };
+
+          if (existingSnap.empty) {
+            // No existing income record — create one
+            await addDocument(`companies/${currentCompany.id}/income`, {
+              ...incomeData,
+              createdBy: user?.uid || "",
+              createdAt: new Date(),
+            });
+          } else {
+            // Update existing income record with new payment amount
+            const existingDoc = existingSnap.docs[0];
+            await updateDocument(`companies/${currentCompany.id}/income`, existingDoc.id, incomeData);
+          }
+        } catch (incomeErr) {
+          console.warn("Income auto-record failed:", incomeErr);
+          // Don't block invoice save if income recording fails
+        }
+      }
+
       toast.success(language === "ar" ? "تم تحديث الفاتورة" : "Invoice updated successfully");
       setEditOpen(false);
       setEditingInvoice(null);
