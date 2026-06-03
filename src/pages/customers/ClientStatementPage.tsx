@@ -165,11 +165,11 @@ export const ClientStatementPage: React.FC = () => {
                 headers={{ invoiceNumber: "Invoice #", date: "Date", dueDate: "Due Date", subtotal: "Subtotal", vat: "VAT", total: "Total", paid: "Paid", outstanding: "Outstanding", status: "Status" }}
               />
               <button
-                onClick={openExportPanel}
+                onClick={() => setShowPrint(true)}
                 className="flex items-center gap-2 px-3 py-2 text-sm font-semibold border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
               >
                 <Printer className="h-4 w-4" />
-                {language === "ar" ? "طباعة" : "Print"}
+                {language === "ar" ? "طباعة / تصدير PDF" : "Print / Export PDF"}
               </button>
             </>
           )}
@@ -679,8 +679,30 @@ export const ClientStatementPage: React.FC = () => {
       <PrintManager
         isOpen={showPrint}
         onClose={() => setShowPrint(false)}
-        title={selectedClient ? `${language === "ar" ? "كشف حساب" : "Client Statement"} — ${selectedClient.name}` : "Client Statement"}
+        title={selectedClient ? `Client Statement — ${selectedClient.name}` : "Client Statement"}
         itemCount={clientInvoices?.length}
+        data={clientInvoices.map((inv: any) => ({
+          invoiceNumber: inv.invoiceNumber || "",
+          issueDate: inv.issueDate || "",
+          dueDate: inv.dueDate || "",
+          subtotal: (inv.subtotal || 0).toFixed(2),
+          vat: (inv.totalVat || 0).toFixed(2),
+          total: (inv.grandTotal || 0).toFixed(2),
+          paid: (inv.amountPaid || 0).toFixed(2),
+          balance: ((inv.grandTotal || 0) - (inv.amountPaid || 0)).toFixed(2),
+          status: inv.status || "",
+        }))}
+        headers={{
+          invoiceNumber: "Invoice #",
+          issueDate: "Date",
+          dueDate: "Due Date",
+          subtotal: "Subtotal",
+          vat: "VAT",
+          total: "Total",
+          paid: "Paid",
+          balance: "Balance",
+          status: "Status",
+        }}
       />
     </div>
   );
