@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Eye, ShoppingCart, CheckCircle, XCircle, Trash2, Package, Printer, List, Pencil, FileText, X, Paperclip, Edit2 } from "lucide-react";
+import { Plus, Eye, ShoppingCart, CheckCircle, XCircle, Trash2, Package, Printer, List, Pencil, FileText, X, Paperclip, Edit2, User, Phone, Mail, MapPin, CreditCard, Calendar, ClipboardList } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
@@ -89,9 +89,21 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [selected, setSelected] = React.useState<PurchaseOrder | null>(null);
 
   const [supplierId, setSupplierId] = React.useState("");
+  const [supplierNameManual, setSupplierNameManual] = React.useState("");
+  const [contactPerson, setContactPerson] = React.useState("");
+  const [supplierPhone, setSupplierPhone] = React.useState("");
+  const [supplierEmail, setSupplierEmail] = React.useState("");
   const [issueDate, setIssueDate] = React.useState(new Date().toISOString().split("T")[0]);
   const [expectedDate, setExpectedDate] = React.useState(new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]);
+  const [paymentTerms, setPaymentTerms] = React.useState("Net 30");
+  const [projectId, setProjectId] = React.useState("");
+  const [projectName, setProjectName] = React.useState("");
+  const [deliveryAddress, setDeliveryAddress] = React.useState("");
+  const [formStatus, setFormStatus] = React.useState<POStatus>("draft");
+  const [signatoryId, setSignatoryId] = React.useState("");
   const [notes, setNotes] = React.useState("");
+  const [projects, setProjects] = React.useState<any[]>([]);
+  const [signatories, setSignatories] = React.useState<any[]>([]);
   const [lines, setLines] = React.useState<LineItem[]>([
     { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }
   ]);
@@ -137,7 +149,10 @@ export const PurchaseOrdersPage: React.FC = () => {
     const u1 = listenCompanyCollection(currentCompany.id, "purchaseOrders", (d) => setOrders((d as PurchaseOrder[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())));
     const u2 = listenCompanyCollection(currentCompany.id, "suppliers", (d) => setSuppliers(d as CustomerOrSupplier[]));
     const u3 = listenCompanyCollection(currentCompany.id, "products", (d) => setProducts(d as Product[]));
-    return () => { u1(); u2(); u3(); };
+    const u4 = listenCompanyCollection(currentCompany.id, "projects", (d) => setProjects(d));
+    getDocs(query(collection(db, "companies", currentCompany.id, "signatories"), where("isActive", "==", true)))
+      .then(snap => setSignatories(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { u1(); u2(); u3(); u4(); };
   }, [currentCompany]);
 
   const totals = React.useMemo(() => calculateTotals(lines), [lines]);
@@ -183,15 +198,26 @@ export const PurchaseOrdersPage: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!supplierId || !currentCompany || !user) return toast.error(language === "ar" ? "الرجاء اختيار المورد" : "Please select a supplier");
+    const hasSupplier = supplierId || supplierNameManual.trim();
+    if (!hasSupplier || !currentCompany || !user) return toast.error(language === "ar" ? "الرجاء اختيار المورد أو إدخال اسمه" : "Please select or enter a supplier");
     setLoading(true);
     try {
-      const supplier = suppliers.find(s => s.id === supplierId)!;
+      const supplier = suppliers.find(s => s.id === supplierId);
+      const resolvedName = supplier ? supplier.name : supplierNameManual.trim();
+      const resolvedNameAr = supplier ? (supplier.nameAr || "") : "";
       const poNum = "PO-" + Date.now().toString().slice(-6);
+      const sigObj = signatories.find(s => s.id === signatoryId);
       await addDocument(`companies/${currentCompany.id}/purchaseOrders`, {
         poNumber: poNum,
-        supplierId, supplierName: supplier.name, supplierNameAr: supplier.nameAr,
-        issueDate, expectedDate, status: "draft",
+        supplierId: supplierId || "",
+        supplierName: resolvedName,
+        supplierNameAr: resolvedNameAr,
+        supplierPhone, supplierEmail, contactPerson,
+        issueDate, expectedDate,
+        paymentTerms, deliveryAddress,
+        projectId, projectName,
+        signatoryId, signatoryName: sigObj?.name || "",
+        status: formStatus,
         lineItems: lines, ...totals,
         currency: "SAR", notes,
         createdBy: user.uid, createdAt: new Date(), updatedAt: new Date(),
@@ -220,16 +246,25 @@ export const PurchaseOrdersPage: React.FC = () => {
   };
 
   const openEditForm = (po: PurchaseOrder) => {
+    const p = po as any;
     setEditingPO(po);
-    setSupplierId(po.supplierId);
+    setSupplierId(po.supplierId || "");
+    setSupplierNameManual(po.supplierName || "");
+    setContactPerson(p.contactPerson || "");
+    setSupplierPhone(p.supplierPhone || "");
+    setSupplierEmail(p.supplierEmail || "");
     setIssueDate(po.issueDate);
     setExpectedDate(po.expectedDate);
+    setPaymentTerms(p.paymentTerms || "Net 30");
+    setDeliveryAddress(p.deliveryAddress || "");
+    setProjectId(p.projectId || "");
+    setProjectName(p.projectName || "");
+    setSignatoryId(p.signatoryId || "");
+    setFormStatus(po.status);
     setNotes(po.notes || "");
-    setAttachments((po as any).attachments || []);
-    // Restore lines
+    setAttachments(p.attachments || []);
     const savedLines = po.lineItems || [];
     setLines(savedLines.length > 0 ? savedLines : [{ productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
-    // Restore line modes: if productId is set -> select mode, else manual
     setLineModes(savedLines.map(l => l.productId ? "select" : "manual" as "select" | "manual"));
     setLineUnits(savedLines.map(l => l.unit || "PCE"));
     setLineCustomModes(savedLines.map(l => !BASE_UNITS.includes(l.unit || "PCE")));
@@ -237,13 +272,23 @@ export const PurchaseOrdersPage: React.FC = () => {
   };
 
   const handleUpdate = async () => {
-    if (!supplierId || !currentCompany || !editingPO) return toast.error(language === "ar" ? "الرجاء اختيار المورد" : "Please select a supplier");
+    const hasSupplier = supplierId || supplierNameManual.trim();
+    if (!hasSupplier || !currentCompany || !editingPO) return toast.error(language === "ar" ? "الرجاء اختيار المورد" : "Please select a supplier");
     setLoading(true);
     try {
-      const supplier = suppliers.find(s => s.id === supplierId)!;
+      const supplier = suppliers.find(s => s.id === supplierId);
+      const resolvedName = supplier ? supplier.name : supplierNameManual.trim();
+      const resolvedNameAr = supplier ? (supplier.nameAr || "") : "";
+      const sigObj = signatories.find(s => s.id === signatoryId);
       await updateDocument(`companies/${currentCompany.id}/purchaseOrders`, editingPO.id, {
-        supplierId, supplierName: supplier.name, supplierNameAr: supplier.nameAr,
+        supplierId: supplierId || "",
+        supplierName: resolvedName, supplierNameAr: resolvedNameAr,
+        supplierPhone, supplierEmail, contactPerson,
         issueDate, expectedDate,
+        paymentTerms, deliveryAddress,
+        projectId, projectName,
+        signatoryId, signatoryName: sigObj?.name || "",
+        status: formStatus,
         lineItems: lines, ...totals,
         notes, attachments,
         updatedAt: new Date(),
@@ -260,11 +305,32 @@ export const PurchaseOrdersPage: React.FC = () => {
   };
 
   const resetForm = () => {
-    setSupplierId(""); setNotes(""); setAttachments([]);
+    setSupplierId(""); setSupplierNameManual(""); setContactPerson("");
+    setSupplierPhone(""); setSupplierEmail(""); setPaymentTerms("Net 30");
+    setDeliveryAddress(""); setProjectId(""); setProjectName("");
+    setSignatoryId(""); setFormStatus("draft"); setNotes(""); setAttachments([]);
     setLines([{ productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
     setLineModes(["select"]);
     setLineUnits(["PCE"]);
     setLineCustomModes([false]);
+  };
+
+  // Auto-fill supplier contact fields when supplier is selected
+  const handleSupplierSelect = (id: string) => {
+    setSupplierId(id);
+    const s = suppliers.find(sup => sup.id === id) as any;
+    if (s) {
+      setSupplierPhone(s.phone || "");
+      setSupplierEmail(s.email || "");
+      setPaymentTerms(s.paymentTerms || "Net 30");
+    }
+  };
+
+  // Auto-fill project name when project is selected
+  const handleProjectSelect = (id: string) => {
+    setProjectId(id);
+    const p = projects.find(pr => pr.id === id) as any;
+    setProjectName(p ? (p.name || "") : "");
   };
 
   const statusLabel = (s: POStatus) => {
@@ -362,23 +428,145 @@ export const PurchaseOrdersPage: React.FC = () => {
 
       {/* New PO Modal */}
       <Modal isOpen={showForm} onClose={() => { setShowForm(false); resetForm(); }}
-        title={language === "ar" ? "أمر شراء جديد" : "New Purchase Order"}>
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select label={language === "ar" ? "المورد" : "Supplier"} value={supplierId}
-              onChange={e => setSupplierId(e.target.value)}
-              options={[{ value: "", label: language === "ar" ? "اختر مورد..." : "Select supplier..." }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
-            <Input label={language === "ar" ? "تاريخ الإصدار" : "Issue Date"} type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} />
-            <Input label={language === "ar" ? "تاريخ التسليم المتوقع" : "Expected Delivery"} type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} />
-            <Input label={language === "ar" ? "ملاحظات" : "Notes"} value={notes} onChange={e => setNotes(e.target.value)} />
+        title="">
+        <div className="flex flex-col gap-0 -mt-2">
+
+          {/* Modal header */}
+          <div className="flex items-start justify-between mb-5 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-brand-primary/10 rounded-xl"><ShoppingCart className="h-5 w-5 text-brand-primary" /></div>
+              <div>
+                <h2 className="text-base font-bold text-slate-800">{language === "ar" ? "أمر شراء جديد" : "New Purchase Order"}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{language === "ar" ? "إنشاء أمر شراء جديد" : "Create a new purchase order"}</p>
+              </div>
+            </div>
+            <select value={formStatus} onChange={e => setFormStatus(e.target.value as POStatus)}
+              className="text-xs font-semibold border-2 border-slate-200 rounded-xl px-3 py-1.5 focus:outline-none bg-white cursor-pointer">
+              <option value="draft">Draft</option>
+              <option value="sent">Sent</option>
+              <option value="approved">Approved</option>
+            </select>
           </div>
-          <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="bg-slate-50 px-3 py-2 flex items-center justify-between border-b border-slate-200">
-              <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "البنود" : "Line Items"}</span>
+
+          {/* ── SUPPLIER INFORMATION ── */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <User className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "معلومات المورد" : "Supplier Information"}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "اختر المورد" : "Select Supplier"}</label>
+                <select value={supplierId} onChange={e => handleSupplierSelect(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                  <option value="">{language === "ar" ? "— اختر من الموردين —" : "— Choose from suppliers —"}</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "اسم المورد (يدوي)" : "Supplier Name (Manual)"}</label>
+                <input value={supplierNameManual} onChange={e => setSupplierNameManual(e.target.value)}
+                  placeholder={language === "ar" ? "أو اكتب اسم المورد" : "Or type supplier name"}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><User className="h-3 w-3" />{language === "ar" ? "جهة الاتصال" : "Contact Person"}</span>
+                </label>
+                <input value={contactPerson} onChange={e => setContactPerson(e.target.value)}
+                  placeholder={language === "ar" ? "اسم جهة الاتصال" : "Contact name"}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{language === "ar" ? "الهاتف" : "Phone"}</span>
+                </label>
+                <input value={supplierPhone} onChange={e => setSupplierPhone(e.target.value)}
+                  placeholder="+966..."
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{language === "ar" ? "البريد الإلكتروني" : "Email"}</span>
+                </label>
+                <input value={supplierEmail} onChange={e => setSupplierEmail(e.target.value)}
+                  placeholder="email@..."
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── ORDER DETAILS ── */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "تفاصيل الطلب" : "Order Details"}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "تاريخ الطلب" : "Order Date"}</label>
+                <input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "التسليم المطلوب" : "Required By"}</label>
+                <input type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><CreditCard className="h-3 w-3" />{language === "ar" ? "شروط الدفع" : "Payment Terms"}</span>
+                </label>
+                <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                  <option>Net 30</option>
+                  <option>Net 60</option>
+                  <option>Net 90</option>
+                  <option>Cash on Delivery</option>
+                  <option>Advance Payment</option>
+                  <option>50% Advance</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "المشروع" : "Project"}</label>
+                <select value={projectId} onChange={e => handleProjectSelect(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                  <option value="">{language === "ar" ? "— بدون مشروع —" : "— No Project —"}</option>
+                  {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{language === "ar" ? "عنوان التسليم" : "Delivery Address"}</span>
+                </label>
+                <input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)}
+                  placeholder={language === "ar" ? "موقع التسليم" : "Delivery location"}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── ORDER ITEMS ── */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2.5 flex items-center justify-between border-b border-slate-200">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                <ClipboardList className="h-3.5 w-3.5 text-brand-primary" />
+                {language === "ar" ? "بنود الطلب" : "Order Items"}
+              </div>
               <button type="button" onClick={handleAddLine}
-                className="text-xs text-brand-primary font-semibold hover:underline flex items-center gap-1">
-                <Plus className="h-3 w-3" /> {language === "ar" ? "إضافة بند" : "Add Line"}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-primary text-white text-xs font-semibold rounded-lg hover:bg-brand-dark transition-colors">
+                <Plus className="h-3.5 w-3.5" /> {language === "ar" ? "إضافة بند" : "+ Add Item"}
               </button>
+            </div>
+
+            {/* Table header */}
+            <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <div className="col-span-4">{language === "ar" ? "الوصف" : "Description"}</div>
+              <div className="col-span-1 text-center">{language === "ar" ? "الكمية" : "QTY"}</div>
+              <div className="col-span-2 text-center">{language === "ar" ? "الوحدة" : "Unit"}</div>
+              <div className="col-span-2 text-right">{language === "ar" ? "سعر الوحدة" : "Unit Price"}</div>
+              <div className="col-span-1 text-right">VAT%</div>
+              <div className="col-span-2 text-right">{language === "ar" ? "الإجمالي" : "Total"}</div>
             </div>
 
             {lines.map((line, idx) => {
@@ -386,105 +574,78 @@ export const PurchaseOrdersPage: React.FC = () => {
               const currentUnit = lineUnits[idx] || line.unit || "PCE";
               const isCustomUnit = lineCustomModes[idx] || false;
               return (
-                <div key={idx} className="p-3 border-b border-slate-100 last:border-0 space-y-2">
-                  {/* Row 1: mode toggle + product/name */}
-                  <div className="flex items-start gap-2">
-                    {/* Mode toggle */}
-                    <div className="flex flex-col gap-1 shrink-0 pt-0.5">
-                      <button type="button" onClick={() => { if (mode !== "select") toggleLineMode(idx); }}
-                        className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${mode === "select" ? "bg-brand-primary text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                        <List className="h-2.5 w-2.5" />{language === "ar" ? "قائمة" : "List"}
-                      </button>
-                      <button type="button" onClick={() => { if (mode !== "manual") toggleLineMode(idx); }}
-                        className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${mode === "manual" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                        <Pencil className="h-2.5 w-2.5" />{language === "ar" ? "يدوي" : "Manual"}
-                      </button>
-                    </div>
-
-                    {/* Product / name */}
-                    <div className="flex-1 min-w-0">
+                <div key={idx} className="px-3 py-2.5 border-b border-slate-100 last:border-0">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    {/* Description */}
+                    <div className="col-span-4">
+                      <div className="flex items-center gap-1 mb-1">
+                        <button type="button" onClick={() => { if (mode !== "select") toggleLineMode(idx); }}
+                          className={`px-1.5 py-0.5 text-[9px] font-semibold rounded transition-colors ${mode === "select" ? "bg-brand-primary text-white" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>
+                          {language === "ar" ? "قائمة" : "List"}
+                        </button>
+                        <button type="button" onClick={() => { if (mode !== "manual") toggleLineMode(idx); }}
+                          className={`px-1.5 py-0.5 text-[9px] font-semibold rounded transition-colors ${mode === "manual" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>
+                          {language === "ar" ? "يدوي" : "Manual"}
+                        </button>
+                      </div>
                       {mode === "select" ? (
                         <select value={line.productId} onChange={e => updateLine(idx, "productId", e.target.value)}
-                          className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-brand-primary">
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-primary bg-white">
                           <option value="">{language === "ar" ? "— اختر منتجاً —" : "— Select product —"}</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{language === "ar" ? (p.nameAr||p.name) : p.name}</option>)}
+                          {products.map(p => <option key={p.id} value={p.id}>{language === "ar" ? (p.nameAr || p.name) : p.name}</option>)}
                         </select>
                       ) : (
-                        <div className="space-y-1">
-                          <input value={line.name} onChange={e => updateLine(idx, "name", e.target.value)}
-                            placeholder={language === "ar" ? "اسم المنتج / الخدمة" : "Product / Service name"}
-                            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-400" />
-                          <input value={line.nameAr || ""} onChange={e => updateLine(idx, "nameAr", e.target.value)}
-                            placeholder={language === "ar" ? "الاسم بالعربي (اختياري)" : "Arabic name (optional)"}
-                            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-400" dir="rtl" />
-                        </div>
+                        <input value={line.name} onChange={e => updateLine(idx, "name", e.target.value)}
+                          placeholder={language === "ar" ? "اسم المنتج / الخدمة" : "Item description"}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-400" />
                       )}
                     </div>
-                  </div>
-
-                  {/* Row 2: Qty | Unit | Price | VAT% | Total | Delete */}
-                  <div className="grid grid-cols-12 gap-2 items-end pl-16">
                     {/* Qty */}
-                    <div className="col-span-2">
-                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "الكمية" : "Qty"}</p>
+                    <div className="col-span-1">
                       <input type="number" value={line.qty} min={1}
                         onChange={e => updateLine(idx, "qty", +e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" />
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none text-center" />
                     </div>
-
-                    {/* Unit — preset dropdown + custom text */}
-                    <div className="col-span-3">
-                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "الوحدة" : "Unit"}</p>
+                    {/* Unit */}
+                    <div className="col-span-2">
                       {isCustomUnit ? (
                         <div className="flex gap-1">
-                          <input value={currentUnit}
-                            onChange={e => setLineUnit(idx, e.target.value)}
-                            placeholder="e.g. m/roll"
-                            className="flex-1 min-w-0 text-xs border border-emerald-300 rounded px-2 py-1.5 focus:outline-none" />
+                          <input value={currentUnit} onChange={e => setLineUnit(idx, e.target.value)}
+                            placeholder="unit" className="flex-1 min-w-0 text-xs border border-emerald-300 rounded-lg px-2 py-1.5 focus:outline-none" />
                           <button type="button" onClick={() => setLineUnit(idx, "PCE", false)}
                             className="text-[10px] text-slate-400 hover:text-slate-600 px-1" title="Reset">↩</button>
                         </div>
                       ) : (
                         <select value={currentUnit}
-                          onChange={e => {
-                            if (e.target.value === "__custom__") {
-                              setLineUnit(idx, "", true);
-                            } else {
-                              setLineUnit(idx, e.target.value, false);
-                            }
-                          }}
-                          className="w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 focus:outline-none">
+                          onChange={e => { if (e.target.value === "__custom__") { setLineUnit(idx, "", true); } else { setLineUnit(idx, e.target.value, false); } }}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none bg-white">
                           {PRESET_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                           <option value="__custom__">✏ Custom...</option>
                         </select>
                       )}
                     </div>
-
                     {/* Unit Price */}
-                    <div className="col-span-3">
-                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "السعر" : "Unit Price"}</p>
+                    <div className="col-span-2">
                       <input type="number" value={line.unitPrice} min={0} step={0.01}
                         onChange={e => updateLine(idx, "unitPrice", +e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" />
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none text-right" />
                     </div>
-
-                    {/* VAT */}
-                    <div className="col-span-2">
-                      <p className="text-[10px] text-slate-400 mb-0.5">VAT %</p>
+                    {/* VAT% */}
+                    <div className="col-span-1">
                       <select value={line.vatRate} onChange={e => updateLine(idx, "vatRate", +e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 focus:outline-none">
+                        className="w-full text-xs border border-slate-200 rounded-lg px-1 py-1.5 focus:outline-none bg-white">
                         <option value={0}>0%</option>
                         <option value={5}>5%</option>
                         <option value={15}>15%</option>
                       </select>
                     </div>
-
                     {/* Total + delete */}
-                    <div className="col-span-2 flex items-end gap-1 pb-0.5">
-                      <span className="text-xs font-bold text-slate-800 flex-1 text-right">{formatCurrency(line.lineTotal, language)}</span>
+                    <div className="col-span-2 flex items-center justify-end gap-1">
+                      <span className="text-xs font-bold text-slate-800">
+                        SAR {Number(line.lineTotal || 0).toFixed(2)}
+                      </span>
                       {lines.length > 1 && (
-                        <button type="button" onClick={() => handleDeleteLine(idx)}
-                          className="text-red-400 hover:text-red-600 shrink-0">
+                        <button type="button" onClick={() => handleDeleteLine(idx)} className="text-slate-300 hover:text-red-500 ml-1 transition-colors">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -493,124 +654,272 @@ export const PurchaseOrdersPage: React.FC = () => {
                 </div>
               );
             })}
+
+            {/* Totals */}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 space-y-1.5">
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>{language === "ar" ? "المجموع الفرعي (قبل الضريبة)" : "Subtotal (before VAT)"}</span>
+                <span className="font-medium">SAR {Number(totals.subtotal).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>{language === "ar" ? "ضريبة القيمة المضافة" : "VAT Amount"}</span>
+                <span className="font-medium">SAR {Number(totals.totalVat).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-bold text-slate-800 border-t border-slate-200 pt-1.5">
+                <span>{language === "ar" ? "الإجمالي الكلي" : "GRAND TOTAL"}</span>
+                <span>SAR {Number(totals.grandTotal).toFixed(2)}</span>
+              </div>
+            </div>
           </div>
-          <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
-            <div className="flex justify-between text-slate-600"><span>{language === "ar" ? "المجموع الفرعي" : "Subtotal"}</span><span>{formatCurrency(totals.subtotal, language)}</span></div>
-            <div className="flex justify-between text-slate-600"><span>{language === "ar" ? "ضريبة القيمة المضافة" : "VAT"}</span><span>{formatCurrency(totals.totalVat, language)}</span></div>
-            <div className="flex justify-between font-bold text-slate-800 text-base border-t border-slate-200 pt-1"><span>{language === "ar" ? "الإجمالي" : "Total"}</span><span>{formatCurrency(totals.grandTotal, language)}</span></div>
+
+          {/* ── NOTES / TERMS ── */}
+          <div className="mt-5">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات / الشروط" : "Notes / Terms"}</span>
+            </div>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+              placeholder={language === "ar" ? "ملاحظات إضافية، شروط وأحكام..." : "Additional notes, terms and conditions..."}
+              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
           </div>
-          <AttachmentUploader folder="purchase-orders" attachments={attachments} onChange={setAttachments} />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setShowForm(false); resetForm(); }}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
-            <Button onClick={handleSave} loading={loading}>{language === "ar" ? "حفظ أمر الشراء" : "Save Purchase Order"}</Button>
+
+          {/* ── AUTHORIZED SIGNATORY ── */}
+          {signatories.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <User className="h-3.5 w-3.5 text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory"}</span>
+              </div>
+              <select value={signatoryId} onChange={e => setSignatoryId(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                <option value="">{language === "ar" ? "— اختر المفوض —" : "— Select Signatory —"}</option>
+                {signatories.map((s: any) => <option key={s.id} value={s.id}>{s.name} — {s.designation}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Footer buttons */}
+          <div className="flex justify-between items-center mt-6 pt-4 border-t border-slate-100">
+            <button onClick={() => { setShowForm(false); resetForm(); }}
+              className="text-sm text-slate-500 hover:text-slate-700 font-medium px-4 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+              {language === "ar" ? "إلغاء" : "Cancel"}
+            </button>
+            <Button onClick={handleSave} loading={loading} className="px-6">
+              {language === "ar" ? "إنشاء أمر الشراء" : "Create Purchase Order"}
+            </Button>
           </div>
         </div>
       </Modal>
 
       {/* Edit PO Modal */}
       <Modal isOpen={showEditForm} onClose={() => { setShowEditForm(false); setEditingPO(null); resetForm(); }}
-        title={language === "ar" ? `تعديل أمر الشراء ${editingPO?.poNumber || ""}` : `Edit Purchase Order ${editingPO?.poNumber || ""}`}>
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select label={language === "ar" ? "المورد" : "Supplier"} value={supplierId}
-              onChange={e => setSupplierId(e.target.value)}
-              options={[{ value: "", label: language === "ar" ? "اختر مورد..." : "Select supplier..." }, ...suppliers.map(s => ({ value: s.id, label: s.name }))]} />
-            <Input label={language === "ar" ? "تاريخ الإصدار" : "Issue Date"} type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} />
-            <Input label={language === "ar" ? "تاريخ التسليم المتوقع" : "Expected Delivery"} type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} />
-            <Input label={language === "ar" ? "ملاحظات" : "Notes"} value={notes} onChange={e => setNotes(e.target.value)} />
+        title="">
+        <div className="flex flex-col gap-0 -mt-2">
+
+          {/* Modal header */}
+          <div className="flex items-start justify-between mb-5 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-50 rounded-xl"><Edit2 className="h-5 w-5 text-amber-500" /></div>
+              <div>
+                <h2 className="text-base font-bold text-slate-800">{language === "ar" ? `تعديل ${editingPO?.poNumber || ""}` : `Edit ${editingPO?.poNumber || ""}`}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{language === "ar" ? "تعديل أمر الشراء" : "Edit purchase order"}</p>
+              </div>
+            </div>
+            <select value={formStatus} onChange={e => setFormStatus(e.target.value as POStatus)}
+              className="text-xs font-semibold border-2 border-slate-200 rounded-xl px-3 py-1.5 focus:outline-none bg-white cursor-pointer">
+              <option value="draft">Draft</option>
+              <option value="sent">Sent</option>
+              <option value="approved">Approved</option>
+            </select>
           </div>
-          <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="bg-slate-50 px-3 py-2 flex items-center justify-between border-b border-slate-200">
-              <span className="text-xs font-semibold text-slate-700">{language === "ar" ? "البنود" : "Line Items"}</span>
+
+          {/* ── SUPPLIER INFORMATION ── */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <User className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "معلومات المورد" : "Supplier Information"}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "اختر المورد" : "Select Supplier"}</label>
+                <select value={supplierId} onChange={e => handleSupplierSelect(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                  <option value="">{language === "ar" ? "— اختر من الموردين —" : "— Choose from suppliers —"}</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "اسم المورد (يدوي)" : "Supplier Name (Manual)"}</label>
+                <input value={supplierNameManual} onChange={e => setSupplierNameManual(e.target.value)}
+                  placeholder={language === "ar" ? "أو اكتب اسم المورد" : "Or type supplier name"}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><User className="h-3 w-3" />{language === "ar" ? "جهة الاتصال" : "Contact Person"}</span>
+                </label>
+                <input value={contactPerson} onChange={e => setContactPerson(e.target.value)}
+                  placeholder={language === "ar" ? "اسم جهة الاتصال" : "Contact name"}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{language === "ar" ? "الهاتف" : "Phone"}</span>
+                </label>
+                <input value={supplierPhone} onChange={e => setSupplierPhone(e.target.value)}
+                  placeholder="+966..."
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{language === "ar" ? "البريد الإلكتروني" : "Email"}</span>
+                </label>
+                <input value={supplierEmail} onChange={e => setSupplierEmail(e.target.value)}
+                  placeholder="email@..."
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── ORDER DETAILS ── */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "تفاصيل الطلب" : "Order Details"}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "تاريخ الطلب" : "Order Date"}</label>
+                <input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "التسليم المطلوب" : "Required By"}</label>
+                <input type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><CreditCard className="h-3 w-3" />{language === "ar" ? "شروط الدفع" : "Payment Terms"}</span>
+                </label>
+                <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                  <option>Net 30</option>
+                  <option>Net 60</option>
+                  <option>Net 90</option>
+                  <option>Cash on Delivery</option>
+                  <option>Advance Payment</option>
+                  <option>50% Advance</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{language === "ar" ? "المشروع" : "Project"}</label>
+                <select value={projectId} onChange={e => handleProjectSelect(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                  <option value="">{language === "ar" ? "— بدون مشروع —" : "— No Project —"}</option>
+                  {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{language === "ar" ? "عنوان التسليم" : "Delivery Address"}</span>
+                </label>
+                <input value={deliveryAddress} onChange={e => setDeliveryAddress(e.target.value)}
+                  placeholder={language === "ar" ? "موقع التسليم" : "Delivery location"}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── ORDER ITEMS ── */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2.5 flex items-center justify-between border-b border-slate-200">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                <ClipboardList className="h-3.5 w-3.5 text-brand-primary" />
+                {language === "ar" ? "بنود الطلب" : "Order Items"}
+              </div>
               <button type="button" onClick={handleAddLine}
-                className="text-xs text-brand-primary font-semibold hover:underline flex items-center gap-1">
-                <Plus className="h-3 w-3" /> {language === "ar" ? "إضافة بند" : "Add Line"}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-primary text-white text-xs font-semibold rounded-lg hover:bg-brand-dark transition-colors">
+                <Plus className="h-3.5 w-3.5" /> {language === "ar" ? "إضافة بند" : "+ Add Item"}
               </button>
+            </div>
+            <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <div className="col-span-4">{language === "ar" ? "الوصف" : "Description"}</div>
+              <div className="col-span-1 text-center">{language === "ar" ? "الكمية" : "QTY"}</div>
+              <div className="col-span-2 text-center">{language === "ar" ? "الوحدة" : "Unit"}</div>
+              <div className="col-span-2 text-right">{language === "ar" ? "سعر الوحدة" : "Unit Price"}</div>
+              <div className="col-span-1 text-right">VAT%</div>
+              <div className="col-span-2 text-right">{language === "ar" ? "الإجمالي" : "Total"}</div>
             </div>
             {lines.map((line, idx) => {
               const mode = lineModes[idx] || "select";
               const currentUnit = lineUnits[idx] || line.unit || "PCE";
               const isCustomUnit = lineCustomModes[idx] || false;
               return (
-                <div key={idx} className="p-3 border-b border-slate-100 last:border-0 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <div className="flex flex-col gap-1 shrink-0 pt-0.5">
-                      <button type="button" onClick={() => { if (mode !== "select") toggleLineMode(idx); }}
-                        className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${mode === "select" ? "bg-brand-primary text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                        <List className="h-2.5 w-2.5" />{language === "ar" ? "قائمة" : "List"}
-                      </button>
-                      <button type="button" onClick={() => { if (mode !== "manual") toggleLineMode(idx); }}
-                        className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${mode === "manual" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                        <Pencil className="h-2.5 w-2.5" />{language === "ar" ? "يدوي" : "Manual"}
-                      </button>
-                    </div>
-                    <div className="flex-1 min-w-0">
+                <div key={idx} className="px-3 py-2.5 border-b border-slate-100 last:border-0">
+                  <div className="grid grid-cols-12 gap-2 items-center">
+                    <div className="col-span-4">
+                      <div className="flex items-center gap-1 mb-1">
+                        <button type="button" onClick={() => { if (mode !== "select") toggleLineMode(idx); }}
+                          className={`px-1.5 py-0.5 text-[9px] font-semibold rounded transition-colors ${mode === "select" ? "bg-brand-primary text-white" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>
+                          {language === "ar" ? "قائمة" : "List"}
+                        </button>
+                        <button type="button" onClick={() => { if (mode !== "manual") toggleLineMode(idx); }}
+                          className={`px-1.5 py-0.5 text-[9px] font-semibold rounded transition-colors ${mode === "manual" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>
+                          {language === "ar" ? "يدوي" : "Manual"}
+                        </button>
+                      </div>
                       {mode === "select" ? (
                         <select value={line.productId} onChange={e => updateLine(idx, "productId", e.target.value)}
-                          className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-brand-primary">
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-primary bg-white">
                           <option value="">{language === "ar" ? "— اختر منتجاً —" : "— Select product —"}</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{language === "ar" ? (p.nameAr||p.name) : p.name}</option>)}
+                          {products.map(p => <option key={p.id} value={p.id}>{language === "ar" ? (p.nameAr || p.name) : p.name}</option>)}
                         </select>
                       ) : (
-                        <div className="space-y-1">
-                          <input value={line.name} onChange={e => updateLine(idx, "name", e.target.value)}
-                            placeholder={language === "ar" ? "اسم المنتج / الخدمة" : "Product / Service name"}
-                            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-400" />
-                          <input value={line.nameAr || ""} onChange={e => updateLine(idx, "nameAr", e.target.value)}
-                            placeholder={language === "ar" ? "الاسم بالعربي (اختياري)" : "Arabic name (optional)"}
-                            className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-400" dir="rtl" />
-                        </div>
+                        <input value={line.name} onChange={e => updateLine(idx, "name", e.target.value)}
+                          placeholder={language === "ar" ? "اسم المنتج / الخدمة" : "Item description"}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-400" />
                       )}
                     </div>
-                  </div>
-                  <div className="grid grid-cols-12 gap-2 items-end pl-16">
-                    <div className="col-span-2">
-                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "الكمية" : "Qty"}</p>
+                    <div className="col-span-1">
                       <input type="number" value={line.qty} min={1}
                         onChange={e => updateLine(idx, "qty", +e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" />
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none text-center" />
                     </div>
-                    <div className="col-span-3">
-                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "الوحدة" : "Unit"}</p>
+                    <div className="col-span-2">
                       {isCustomUnit ? (
                         <div className="flex gap-1">
                           <input value={currentUnit} onChange={e => setLineUnit(idx, e.target.value)}
-                            placeholder="e.g. m/roll"
-                            className="flex-1 min-w-0 text-xs border border-emerald-300 rounded px-2 py-1.5 focus:outline-none" />
+                            placeholder="unit" className="flex-1 min-w-0 text-xs border border-emerald-300 rounded-lg px-2 py-1.5 focus:outline-none" />
                           <button type="button" onClick={() => setLineUnit(idx, "PCE", false)}
-                            className="text-[10px] text-slate-400 hover:text-slate-600 px-1" title="Reset">↩</button>
+                            className="text-[10px] text-slate-400 hover:text-slate-600 px-1">↩</button>
                         </div>
                       ) : (
                         <select value={currentUnit}
-                          onChange={e => {
-                            if (e.target.value === "__custom__") { setLineUnit(idx, "", true); }
-                            else { setLineUnit(idx, e.target.value, false); }
-                          }}
-                          className="w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 focus:outline-none">
+                          onChange={e => { if (e.target.value === "__custom__") { setLineUnit(idx, "", true); } else { setLineUnit(idx, e.target.value, false); } }}
+                          className="w-full text-xs border border-slate-200 rounded-lg px-1.5 py-1.5 focus:outline-none bg-white">
                           {PRESET_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                           <option value="__custom__">✏ Custom...</option>
                         </select>
                       )}
                     </div>
-                    <div className="col-span-3">
-                      <p className="text-[10px] text-slate-400 mb-0.5">{language === "ar" ? "السعر" : "Unit Price"}</p>
+                    <div className="col-span-2">
                       <input type="number" value={line.unitPrice} min={0} step={0.01}
                         onChange={e => updateLine(idx, "unitPrice", +e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none" />
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none text-right" />
                     </div>
-                    <div className="col-span-2">
-                      <p className="text-[10px] text-slate-400 mb-0.5">VAT %</p>
+                    <div className="col-span-1">
                       <select value={line.vatRate} onChange={e => updateLine(idx, "vatRate", +e.target.value)}
-                        className="w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 focus:outline-none">
+                        className="w-full text-xs border border-slate-200 rounded-lg px-1 py-1.5 focus:outline-none bg-white">
                         <option value={0}>0%</option>
                         <option value={5}>5%</option>
                         <option value={15}>15%</option>
                       </select>
                     </div>
-                    <div className="col-span-2 flex items-end gap-1 pb-0.5">
-                      <span className="text-xs font-bold text-slate-800 flex-1 text-right">{formatCurrency(line.lineTotal, language)}</span>
+                    <div className="col-span-2 flex items-center justify-end gap-1">
+                      <span className="text-xs font-bold text-slate-800">SAR {Number(line.lineTotal || 0).toFixed(2)}</span>
                       {lines.length > 1 && (
-                        <button type="button" onClick={() => handleDeleteLine(idx)} className="text-red-400 hover:text-red-600 shrink-0">
+                        <button type="button" onClick={() => handleDeleteLine(idx)} className="text-slate-300 hover:text-red-500 ml-1 transition-colors">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -619,16 +928,57 @@ export const PurchaseOrdersPage: React.FC = () => {
                 </div>
               );
             })}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 space-y-1.5">
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>{language === "ar" ? "المجموع الفرعي (قبل الضريبة)" : "Subtotal (before VAT)"}</span>
+                <span className="font-medium">SAR {Number(totals.subtotal).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>{language === "ar" ? "ضريبة القيمة المضافة" : "VAT Amount"}</span>
+                <span className="font-medium">SAR {Number(totals.totalVat).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-bold text-slate-800 border-t border-slate-200 pt-1.5">
+                <span>{language === "ar" ? "الإجمالي الكلي" : "GRAND TOTAL"}</span>
+                <span>SAR {Number(totals.grandTotal).toFixed(2)}</span>
+              </div>
+            </div>
           </div>
-          <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
-            <div className="flex justify-between text-slate-600"><span>{language === "ar" ? "المجموع الفرعي" : "Subtotal"}</span><span>{formatCurrency(totals.subtotal, language)}</span></div>
-            <div className="flex justify-between text-slate-600"><span>{language === "ar" ? "ضريبة القيمة المضافة" : "VAT"}</span><span>{formatCurrency(totals.totalVat, language)}</span></div>
-            <div className="flex justify-between font-bold text-slate-800 text-base border-t border-slate-200 pt-1"><span>{language === "ar" ? "الإجمالي" : "Total"}</span><span>{formatCurrency(totals.grandTotal, language)}</span></div>
+
+          {/* ── NOTES / TERMS ── */}
+          <div className="mt-5">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات / الشروط" : "Notes / Terms"}</span>
+            </div>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+              placeholder={language === "ar" ? "ملاحظات إضافية، شروط وأحكام..." : "Additional notes, terms and conditions..."}
+              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
           </div>
-          <AttachmentUploader folder="purchase-orders" attachments={attachments} onChange={setAttachments} />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => { setShowEditForm(false); setEditingPO(null); resetForm(); }}>{language === "ar" ? "إلغاء" : "Cancel"}</Button>
-            <Button onClick={handleUpdate} loading={loading}>{language === "ar" ? "حفظ التعديلات" : "Save Changes"}</Button>
+
+          {/* ── AUTHORIZED SIGNATORY ── */}
+          {signatories.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <User className="h-3.5 w-3.5 text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory"}</span>
+              </div>
+              <select value={signatoryId} onChange={e => setSignatoryId(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary bg-white">
+                <option value="">{language === "ar" ? "— اختر المفوض —" : "— Select Signatory —"}</option>
+                {signatories.map((s: any) => <option key={s.id} value={s.id}>{s.name} — {s.designation}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Footer buttons */}
+          <div className="flex justify-between items-center mt-6 pt-4 border-t border-slate-100">
+            <button onClick={() => { setShowEditForm(false); setEditingPO(null); resetForm(); }}
+              className="text-sm text-slate-500 hover:text-slate-700 font-medium px-4 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+              {language === "ar" ? "إلغاء" : "Cancel"}
+            </button>
+            <Button onClick={handleUpdate} loading={loading} className="px-6">
+              {language === "ar" ? "حفظ التعديلات" : "Save Changes"}
+            </Button>
           </div>
         </div>
       </Modal>
@@ -896,11 +1246,18 @@ export const PurchaseOrdersPage: React.FC = () => {
                           <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151"></td>
                           <td style="padding:8px 12px;border:1px solid #cbd5e1"></td>
                         </tr>`}
-                        ${supplierRecord?.paymentTerms ? `<tr>
+                        ${(po as any).paymentTerms || supplierRecord?.paymentTerms ? `<tr>
                           <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Payment Terms</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt" colspan="3">${supplierRecord.paymentTerms}</td>
+                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt" colspan="3">${(po as any).paymentTerms || supplierRecord?.paymentTerms || ""}</td>
                         </tr>` : ""}
                       </table>`,
+
+                      // ── Delivery address (if set) ──
+                      (po as any).deliveryAddress ? `
+                        <div style="margin-bottom:14px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;display:flex;gap:10px;align-items:flex-start">
+                          <div style="font-size:7.5pt;font-weight:700;color:#374151;white-space:nowrap;min-width:100px">Delivery Address:</div>
+                          <div style="font-size:8.5pt;color:#1a1a1a">${(po as any).deliveryAddress}</div>
+                        </div>` : "",
 
                       // ── PURCHASE ORDER ITEMS banner ──
                       `<div style="background:#3730a3;color:#fff;padding:10px 14px;font-size:9pt;font-weight:800;letter-spacing:1.5px;text-align:center;text-transform:uppercase;margin-bottom:0">
