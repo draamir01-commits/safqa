@@ -1319,10 +1319,7 @@ export const PurchaseOrdersPage: React.FC = () => {
                           <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1"></td>
                           <td style="padding:6px 10px;border:1px solid #cbd5e1"></td>
                         </tr>` : ""}`}
-                        ${(po as any).paymentTerms || supplierRecord?.paymentTerms ? `<tr>
-                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Payment Terms</td>
-                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt" colspan="3">${(po as any).paymentTerms || supplierRecord?.paymentTerms || ""}</td>
-                        </tr>` : ""}
+
                         ${(po as any).deliveryAddress ? `<tr>
                           <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Delivery Address</td>
                           <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt" colspan="3">${(po as any).deliveryAddress}</td>
