@@ -10,6 +10,7 @@ import {
   onSnapshot, getDocs
 } from "firebase/firestore";
 import { db } from "../../firebase/config";
+import { uploadFile } from "../../firebase/storage";
 import { useAuthStore } from "../../stores/authStore";
 import { useCompanyStore } from "../../stores/companyStore";
 import { useUIStore } from "../../stores/uiStore";
@@ -143,15 +144,6 @@ export const SettingsPage: React.FC = () => {
   const logoFileRef = React.useRef<HTMLInputElement>(null);
   const [stampUrl, setStampUrl] = React.useState("");
   const [logoUrl, setLogoUrl] = React.useState("");
-
-  // Convert file to base64
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
 
   // Load company data into form
   React.useEffect(() => {
@@ -484,8 +476,8 @@ export const SettingsPage: React.FC = () => {
                         onChange={async e => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          const b64 = await fileToBase64(file);
-                          setLogoUrl(b64);
+                          const url = await uploadFile(currentCompany!.id, "logos", file);
+                          setLogoUrl(url);
                           if (logoFileRef.current) logoFileRef.current.value = "";
                         }}
                       />
@@ -528,8 +520,8 @@ export const SettingsPage: React.FC = () => {
                         onChange={async e => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          const b64 = await fileToBase64(file);
-                          setStampUrl(b64);
+                          const url = await uploadFile(currentCompany!.id, "stamps", file);
+                          setStampUrl(url);
                           if (stampFileRef.current) stampFileRef.current.value = "";
                         }}
                       />
@@ -651,8 +643,8 @@ export const SettingsPage: React.FC = () => {
                     onChange={async e => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      const b64 = await fileToBase64(file);
-                      setFullLetterhead(b64);
+                      const url = await uploadFile(currentCompany!.id, "letterheads", file);
+                      setFullLetterhead(url);
                       if (fullLHFileRef.current) fullLHFileRef.current.value = "";
                     }}
                   />
@@ -742,8 +734,8 @@ export const SettingsPage: React.FC = () => {
                       onChange={async e => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const b64 = await fileToBase64(file);
-                        setNewLHFile(b64);
+                        const url = await uploadFile(currentCompany!.id, "letterheads", file);
+                        setNewLHFile(url);
                       }}
                     />
                   </div>
@@ -800,8 +792,8 @@ export const SettingsPage: React.FC = () => {
                     onChange={async e => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      const b64 = await fileToBase64(file);
-                      setHeaderAssetUrl(b64);
+                      const url = await uploadFile(currentCompany!.id, "letterheads", file);
+                      setHeaderAssetUrl(url);
                     }}
                   />
                 </div>
@@ -841,8 +833,8 @@ export const SettingsPage: React.FC = () => {
                     onChange={async e => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      const b64 = await fileToBase64(file);
-                      setFooterAssetUrl(b64);
+                      const url = await uploadFile(currentCompany!.id, "letterheads", file);
+                      setFooterAssetUrl(url);
                     }}
                   />
                 </div>
@@ -1167,8 +1159,8 @@ export const SettingsPage: React.FC = () => {
                 onChange={async e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  const b64 = await fileToBase64(file);
-                  setSigSignatureUrl(b64);
+                  const url = await uploadFile(currentCompany!.id, "signatures", file);
+                  setSigSignatureUrl(url);
                   if (sigFileRef.current) sigFileRef.current.value = "";
                 }}
               />
