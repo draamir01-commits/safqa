@@ -215,7 +215,7 @@ const generateWpsSif = (
 };
 
 // ─────────────────────────────────────────────
-// Payslip Modal
+// Payslip Modal — uses same export panel as invoices/POs
 // ─────────────────────────────────────────────
 const PayslipModal: React.FC<{
   employee: Employee;
@@ -225,216 +225,473 @@ const PayslipModal: React.FC<{
   language: "ar" | "en";
 }> = ({ employee, month, advanceDeduction = 0, onClose, language }) => {
   const { currentCompany } = useCompanyStore();
-  const [signatories, setSignatories] = React.useState<any[]>([]);
-  const [selectedSig, setSelectedSig] = React.useState("");
+
+  // ── Adjustments ──────────────────────────────
   const [absenceDays, setAbsenceDays] = React.useState(0);
   const [lateDays, setLateDays] = React.useState(0);
   const [otherDed, setOtherDed] = React.useState(0);
   const [overtimeHours, setOvertimeHours] = React.useState(0);
 
-  React.useEffect(() => {
-    if (!currentCompany) return;
-    getDocs(query(collection(db, "companies", currentCompany.id, "signatories"),
-      where("isActive", "==", true)))
-      .then(s => setSignatories(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-  }, [currentCompany]);
+  // ── Export panel state (mirrors InvoicesPage exactly) ──
+  const [showExportPanel, setShowExportPanel] = React.useState(false);
+  const [expLHMode, setExpLHMode] = React.useState<"none"|"header"|"full">("none");
+  const [expLHId, setExpLHId] = React.useState("primary");
+  const [expLogo, setExpLogo] = React.useState(true);
+  const [expStamp, setExpStamp] = React.useState(false);
+  const [expSigId, setExpSigId] = React.useState("");
+  const [expIncludeSig, setExpIncludeSig] = React.useState(false);
+  const [expSignatories, setExpSignatories] = React.useState<any[]>([]);
+  const [expLetterheads, setExpLetterheads] = React.useState<any[]>([]);
+  const [expGenerating, setExpGenerating] = React.useState(false);
 
+  // Derived salary values
   const gross = calcGross(employee);
   const gosi = calcGosi(employee);
   const dailyRate = employee.basicSalary / 30;
   const hourlyRate = employee.basicSalary / (30 * 8);
   const absenceDed = Math.round(dailyRate * absenceDays * 100) / 100;
-  const lateDed = Math.round(dailyRate * lateDays * 0.5 * 100) / 100;   // half-day for late
+  const lateDed = Math.round(dailyRate * lateDays * 0.5 * 100) / 100;
   const overtimePay = Math.round(hourlyRate * 1.5 * overtimeHours * 100) / 100;
   const totalDed = gosi.employee + absenceDed + lateDed + advanceDeduction + otherDed;
   const net = gross + overtimePay - totalDed;
-  const sig = signatories.find(s => s.id === selectedSig);
 
-  const handlePrint = () => {
+  const openExportPanel = () => {
     const co = currentCompany as any;
-    const win = window.open("", "_blank", "width=800,height=900");
-    if (!win) { toast.error("Allow popups"); return; }
-    const html = `<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8">
-<title>Payslip - ${employee.name} - ${month}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  body{font-family:Cairo,Arial,sans-serif;font-size:9pt;color:#1a1a1a;padding:12mm}
-  @media print{@page{size:A4;margin:0}body{padding:10mm}}
-  table{width:100%;border-collapse:collapse}
-  td,th{padding:5px 8px;border:0.5px solid #cbd5e1;font-size:8.5pt}
-  th{background:#f8fafc;font-weight:700;color:#374151}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #e2e8f0}
-  .title{text-align:center;font-size:16pt;font-weight:800;margin-bottom:14px}
-  .section-label{font-size:7.5pt;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 5px}
-  .total-row td{font-weight:700;font-size:10pt;background:#1e3a8a;color:#fff}
-  .net-words{margin-top:8px;padding:7px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;font-size:8pt;color:#166534}
-  .sig-area{margin-top:20px;padding-top:12px;border-top:1.5px solid #e2e8f0;display:flex;justify-content:space-between}
-  .sig-block{text-align:center;font-size:8pt}
-  .sig-line{border-bottom:1px solid #1a1a1a;width:140px;margin:30px auto 5px}
-</style></head><body>
-<div class="header">
-  <div>
-    ${co?.logo ? `<img src="${co.logo}" style="height:45px;object-fit:contain"/>` : `<div style="font-size:13pt;font-weight:700">${co?.name || ""}</div>`}
-    <div style="font-size:8pt;color:#6b7280;margin-top:3px">${co?.name || ""}</div>
-    ${co?.vatNumber ? `<div style="font-size:7.5pt;color:#9ca3af">VAT: ${co.vatNumber}</div>` : ""}
-  </div>
-  <div style="text-align:right">
-    <div style="font-size:14pt;font-weight:800;color:#1e40af">PAYSLIP</div>
-    <div style="font-size:9pt;font-family:Cairo,Arial,sans-serif;direction:rtl;color:#6b7280">كشف الراتب</div>
-    <div style="font-size:8.5pt;font-weight:600;margin-top:4px">${month}</div>
-  </div>
-</div>
-
-<table style="margin-bottom:10px">
-  <tr><th>Employee</th><td>${employee.name}</td><th>الموظف</th><td style="direction:rtl">${employee.nameAr}</td></tr>
-  <tr><th>Job Title</th><td>${employee.role}</td><th>Department</th><td>${employee.department || "—"}</td></tr>
-  <tr><th>ID / Iqama</th><td>${employee.nationalId || employee.iqamaNumber || "—"}</td><th>GOSI ID</th><td>${employee.gosiId || "—"}</td></tr>
-  <tr><th>Bank</th><td>${employee.bankName || "—"}</td><th>IBAN</th><td>${employee.iban || "—"}</td></tr>
-  <tr><th>Join Date</th><td>${employee.joinDate}</td><th>Payment Method</th><td>Bank Transfer — WPS</td></tr>
-</table>
-
-<div class="section-label">Earnings — المستحقات</div>
-<table style="margin-bottom:0">
-  <tr><th>Description</th><th style="text-align:right">Amount (SAR)</th></tr>
-  <tr><td>Basic Salary — الراتب الأساسي</td><td style="text-align:right">${employee.basicSalary.toFixed(2)}</td></tr>
-  <tr><td>Housing Allowance — بدل السكن</td><td style="text-align:right">${employee.housingAllowance.toFixed(2)}</td></tr>
-  <tr><td>Transport Allowance — بدل النقل</td><td style="text-align:right">${employee.transportAllowance.toFixed(2)}</td></tr>
-  ${employee.foodAllowance ? `<tr><td>Food Allowance — بدل الطعام</td><td style="text-align:right">${employee.foodAllowance.toFixed(2)}</td></tr>` : ""}
-  ${employee.otherAllowances ? `<tr><td>Other Allowances</td><td style="text-align:right">${employee.otherAllowances.toFixed(2)}</td></tr>` : ""}
-  ${overtimePay > 0 ? `<tr><td>Overtime (${overtimeHours}h × 150%) — أوفرتايم</td><td style="text-align:right">${overtimePay.toFixed(2)}</td></tr>` : ""}
-  <tr style="background:#f1f5f9"><td><strong>Gross Salary — إجمالي الراتب</strong></td><td style="text-align:right"><strong>${(gross + overtimePay).toFixed(2)}</strong></td></tr>
-</table>
-
-<div class="section-label">Deductions — الاستقطاعات</div>
-<table style="margin-bottom:0">
-  <tr><th>Description</th><th style="text-align:right">Amount (SAR)</th></tr>
-  ${gosi.employee > 0 ? `<tr><td>GOSI Employee Contribution (${isSaudi(employee) ? "10%" : "0%"}) — اشتراك التأمينات</td><td style="text-align:right">${gosi.employee.toFixed(2)}</td></tr>` : ""}
-  ${absenceDed > 0 ? `<tr><td>Absence Deduction (${absenceDays} days)</td><td style="text-align:right">${absenceDed.toFixed(2)}</td></tr>` : ""}
-  ${lateDed > 0 ? `<tr><td>Late Deduction (${lateDays} days)</td><td style="text-align:right">${lateDed.toFixed(2)}</td></tr>` : ""}
-  ${advanceDeduction > 0 ? `<tr><td>Salary Advance Deduction — استقطاع سلفة</td><td style="text-align:right">${advanceDeduction.toFixed(2)}</td></tr>` : ""}
-  ${otherDed > 0 ? `<tr><td>Other Deductions</td><td style="text-align:right">${otherDed.toFixed(2)}</td></tr>` : ""}
-  ${totalDed === 0 ? `<tr><td style="color:#9ca3af">No deductions</td><td></td></tr>` : ""}
-  <tr style="background:#fef2f2"><td><strong>Total Deductions — إجمالي الاستقطاعات</strong></td><td style="text-align:right"><strong>${totalDed.toFixed(2)}</strong></td></tr>
-</table>
-
-<table style="margin-top:0">
-  <tr class="total-row">
-    <td>NET SALARY — صافي الراتب</td>
-    <td style="text-align:right;font-size:12pt">SAR ${net.toFixed(2)}</td>
-  </tr>
-</table>
-
-<div class="net-words">المبلغ كتابةً: ${numberToArabicWords(Math.round(net))}</div>
-
-${gosi.employer > 0 ? `<div style="margin-top:8px;padding:6px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;font-size:7.5pt;color:#1e40af">
-  Employer GOSI Contribution (${isSaudi(employee) ? "12%" : "2%"}): SAR ${gosi.employer.toFixed(2)} — مدفوعة من صاحب العمل
-</div>` : ""}
-
-<div class="sig-area">
-  <div class="sig-block">
-    <div class="sig-line"></div>
-    <div>${employee.name}</div>
-    <div style="color:#9ca3af;font-size:7.5pt">Employee Signature — توقيع الموظف</div>
-  </div>
-  ${sig ? `<div class="sig-block">
-    ${sig.signatureUrl ? `<img src="${sig.signatureUrl}" style="height:36px;object-fit:contain;display:block;margin:0 auto 6px"/>` : `<div style="height:36px"></div>`}
-    <div class="sig-line"></div>
-    <div>${sig.name}</div>
-    <div style="color:#9ca3af;font-size:7.5pt">${sig.designation || "Authorized Signatory"}</div>
-  </div>` : ""}
-  ${co?.stamp ? `<div style="text-align:center"><img src="${co.stamp}" style="height:70px;width:70px;object-fit:contain;opacity:0.7"/><div style="font-size:7pt;color:#9ca3af;margin-top:3px">Company Stamp</div></div>` : ""}
-</div>
-
-<script>window.onload=function(){setTimeout(function(){window.print()},1000)}</script>
-</body></html>`;
-    win.document.open(); win.document.write(html); win.document.close();
+    const lhs: any[] = [{ id: "primary", name: "Primary Letterhead", url: co?.fullLetterhead || "" }];
+    (co?.additionalLetterheads || []).forEach((lh: any) => lhs.push(lh));
+    setExpLetterheads(lhs);
+    setExpLogo(co?.defaultShowLogo ?? !!(co?.logo));
+    setExpStamp(co?.defaultShowStamp ?? !!(co?.stamp));
+    if (co?.fullLetterhead) setExpLHMode("full");
+    else if (co?.additionalLetterheads?.length) setExpLHMode("header");
+    else setExpLHMode("none");
+    if (currentCompany) {
+      getDocs(query(collection(db, "companies", currentCompany.id, "signatories"), where("isActive", "==", true)))
+        .then(snap => {
+          const sigs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          setExpSignatories(sigs);
+          if (sigs.length === 1) { setExpSigId(sigs[0].id); setExpIncludeSig(!!(sigs[0] as any).signatureUrl); }
+          else if (co?.defaultSignatoryId) {
+            const found = sigs.find((s: any) => s.id === co.defaultSignatoryId);
+            if (found) { setExpSigId(found.id); setExpIncludeSig(!!(found as any).signatureUrl); }
+          }
+        }).catch(() => {});
+    }
+    setShowExportPanel(true);
   };
 
   return (
-    <Modal isOpen title={language === "ar" ? "كشف الراتب" : "Generate Payslip"} onClose={onClose} size="lg">
-      <div className="space-y-4">
-        {/* Employee summary */}
-        <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <p className="font-bold text-slate-800">{employee.name}</p>
-            <p className="text-xs text-slate-500">{employee.role} • {employee.department}</p>
-            <p className="text-xs text-slate-400">{month}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-500">Gross</p>
-            <p className="font-bold text-brand-primary text-lg">{formatCurrency(calcGross(employee), language)}</p>
-          </div>
-        </div>
+    <>
+      <Modal isOpen title={language === "ar" ? "كشف الراتب" : "Generate Payslip"} onClose={onClose} size="lg">
+        <div className="space-y-4">
 
-        {/* Adjustments */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Absence Days (خصم غياب)</label>
-            <input type="number" min={0} max={30} value={absenceDays} onChange={e => setAbsenceDays(+e.target.value)}
-              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Late Days (خصم تأخير)</label>
-            <input type="number" min={0} max={30} value={lateDays} onChange={e => setLateDays(+e.target.value)}
-              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Overtime Hours @ 150%</label>
-            <input type="number" min={0} value={overtimeHours} onChange={e => setOvertimeHours(+e.target.value)}
-              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Other Deductions (SAR)</label>
-            <input type="number" min={0} value={otherDed} onChange={e => setOtherDed(+e.target.value)}
-              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
-          </div>
-        </div>
-
-        {/* GOSI summary */}
-        {employee.gosiEnrolled && (
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs">
+          {/* Employee summary */}
+          <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
             <div>
-              <span className="text-slate-500">Employee GOSI ({isSaudi(employee) ? "10%" : "0%"})</span>
-              <span className="float-right font-bold text-red-600">- SAR {calcGosi(employee).employee.toFixed(2)}</span>
+              <p className="font-bold text-slate-800">{employee.name}</p>
+              <p className="text-xs text-slate-500">{employee.role}{employee.department ? ` • ${employee.department}` : ""}</p>
+              <p className="text-xs text-slate-400">{month}</p>
             </div>
-            <div>
-              <span className="text-slate-500">Employer GOSI ({isSaudi(employee) ? "12%" : "2%"})</span>
-              <span className="float-right font-bold text-emerald-600">SAR {calcGosi(employee).employer.toFixed(2)}</span>
+            <div className="text-right">
+              <p className="text-xs text-slate-500">Gross</p>
+              <p className="font-bold text-brand-primary text-lg">{formatCurrency(gross, language)}</p>
             </div>
           </div>
-        )}
 
-        {/* Net */}
-        <div className="bg-slate-900 text-white rounded-xl p-4 flex justify-between items-center">
-          <div>
-            <p className="text-xs text-slate-400">Net Salary — صافي الراتب</p>
-            <p className="text-[10px] text-slate-500 mt-1 font-arabic">{numberToArabicWords(Math.round(net))}</p>
+          {/* Adjustments */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Absence Days</label>
+              <input type="number" min={0} max={30} value={absenceDays}
+                onChange={e => setAbsenceDays(+e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Late Days (½-day deduction)</label>
+              <input type="number" min={0} max={30} value={lateDays}
+                onChange={e => setLateDays(+e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Overtime Hours @ 150%</label>
+              <input type="number" min={0} value={overtimeHours}
+                onChange={e => setOvertimeHours(+e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Other Deductions (SAR)</label>
+              <input type="number" min={0} value={otherDed}
+                onChange={e => setOtherDed(+e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary" />
+            </div>
           </div>
-          <p className="text-2xl font-bold">{formatCurrency(net, language)}</p>
-        </div>
 
-        {/* Signatory */}
-        {signatories.length > 0 && (
-          <Select label={language === "ar" ? "المفوض بالتوقيع" : "Authorized Signatory"}
-            value={selectedSig} onChange={e => setSelectedSig(e.target.value)}
-            options={[{ value: "", label: "None" }, ...signatories.map(s => ({ value: s.id, label: `${s.name} — ${s.designation}` }))]} />
-        )}
+          {/* GOSI preview */}
+          {employee.gosiEnrolled && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-slate-500">Employee GOSI ({isSaudi(employee) ? "10%" : "0%"})</span>
+                <span className="float-right font-bold text-red-600">- SAR {gosi.employee.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Employer GOSI ({isSaudi(employee) ? "12%" : "2%"})</span>
+                <span className="float-right font-bold text-emerald-600">SAR {gosi.employer.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
 
-        {advanceDeduction > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
-            ⚠ Advance deduction of SAR {advanceDeduction.toFixed(2)} will appear on this payslip.
+          {advanceDeduction > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+              ⚠ Advance deduction of SAR {advanceDeduction.toFixed(2)} will appear on this payslip.
+            </div>
+          )}
+
+          {/* Net */}
+          <div className="bg-slate-900 text-white rounded-xl p-4 flex justify-between items-center">
+            <div>
+              <p className="text-xs text-slate-400">Net Salary — صافي الراتب</p>
+              <p className="text-[10px] text-slate-500 mt-1">{numberToArabicWords(Math.round(net))}</p>
+            </div>
+            <p className="text-2xl font-bold">{formatCurrency(net, language)}</p>
           </div>
-        )}
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" onClick={onClose}>{language === "ar" ? "إغلاق" : "Close"}</Button>
-          <Button onClick={handlePrint} className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            {language === "ar" ? "طباعة / PDF" : "Print / PDF"}
-          </Button>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={onClose}>{language === "ar" ? "إغلاق" : "Close"}</Button>
+            <Button onClick={openExportPanel} className="flex items-center gap-2">
+              <Printer className="h-4 w-4" />
+              {language === "ar" ? "طباعة / PDF" : "Print / PDF"}
+            </Button>
+          </div>
         </div>
-      </div>
-    </Modal>
+      </Modal>
+
+      {/* ── Export Panel (same style as invoices) ── */}
+      {showExportPanel && (
+        <div className="fixed inset-0 z-[60] flex justify-end" onClick={() => setShowExportPanel(false)}>
+          <div className="absolute inset-0 bg-slate-900/30" />
+          <div className="relative w-80 bg-white h-full shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-bold text-slate-800">{language === "ar" ? "تصدير كشف الراتب" : "Export Payslip PDF"}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{employee.name} — {month}</p>
+              </div>
+              <button onClick={() => setShowExportPanel(false)} className="p-1.5 hover:bg-slate-100 rounded-lg">
+                <X className="h-5 w-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="flex-1 p-5 space-y-5 overflow-y-auto">
+
+              {/* Letterhead */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">
+                  {language === "ar" ? "الترويسة" : "Letterhead"}
+                </p>
+                <div className="space-y-2">
+                  {([
+                    { mode: "none",   icon: "⊘", labelEn: "No Letterhead",        descEn: "Plain company text header" },
+                    { mode: "header", icon: "▬", labelEn: "Header + Footer",       descEn: "Banner image top & bottom" },
+                    { mode: "full",   icon: "▮", labelEn: "Full Page Letterhead",  descEn: "Full A4 background every page" },
+                  ] as const).map(opt => (
+                    <label key={opt.mode} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${expLHMode === opt.mode ? "border-brand-primary bg-blue-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"}`}>
+                      <input type="radio" name="psLHMode" checked={expLHMode === opt.mode} onChange={() => setExpLHMode(opt.mode)} className="mt-0.5 text-brand-primary" />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">{opt.icon}</span>
+                          <span className="text-xs font-semibold text-slate-700">{opt.labelEn}</span>
+                          {opt.mode === "full" && !(currentCompany as any)?.fullLetterhead && <span className="text-[9px] text-amber-500 font-semibold">not uploaded</span>}
+                          {opt.mode === "full" && (currentCompany as any)?.fullLetterhead && <span className="text-[9px] text-emerald-500 font-semibold">✓ A4</span>}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{opt.descEn}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {expLHMode !== "none" && expLetterheads.length > 1 && (
+                  <div className="mt-3 space-y-1">
+                    <p className="text-[10px] text-slate-500 font-semibold pl-1">Choose source:</p>
+                    {expLetterheads.map((lh: any) => (
+                      <label key={lh.id} className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer ${expLHId === lh.id ? "border-brand-primary bg-blue-50" : "border-slate-100"}`}>
+                        <input type="radio" checked={expLHId === lh.id} onChange={() => setExpLHId(lh.id)} className="text-brand-primary" />
+                        {lh.url ? <img src={lh.url} alt={lh.name} className="h-7 object-contain rounded border border-slate-200 bg-white" /> : <div className="h-7 w-10 bg-slate-100 rounded border" />}
+                        <span className="text-xs font-medium text-slate-700">{lh.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Logo & Stamp */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">
+                  {language === "ar" ? "الشعار والختم" : "Logo & Stamp"}
+                </p>
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-brand-primary">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700">Include Logo</span>
+                      {!(currentCompany as any)?.logo && <p className="text-[10px] text-slate-400">No logo uploaded</p>}
+                    </div>
+                    <input type="checkbox" checked={expLogo} onChange={e => setExpLogo(e.target.checked)}
+                      disabled={!(currentCompany as any)?.logo} className="rounded border-slate-300 text-brand-primary" />
+                  </label>
+                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer hover:border-brand-primary">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700">Include Stamp</span>
+                      {!(currentCompany as any)?.stamp && <p className="text-[10px] text-slate-400">No stamp uploaded</p>}
+                    </div>
+                    <input type="checkbox" checked={expStamp} onChange={e => setExpStamp(e.target.checked)}
+                      disabled={!(currentCompany as any)?.stamp} className="rounded border-slate-300 text-brand-primary" />
+                  </label>
+                </div>
+              </div>
+
+              {/* Signatory */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-primary mb-3">
+                  {language === "ar" ? "التوقيع المفوض" : "Authorized Signatory"}
+                </p>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                  <select value={expSigId} onChange={e => setExpSigId(e.target.value)}
+                    className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white">
+                    <option value="">None</option>
+                    {expSignatories.map((s: any) => <option key={s.id} value={s.id}>{s.name} — {s.designation}</option>)}
+                  </select>
+                  {expSigId && expSignatories.find((s: any) => s.id === expSigId)?.signatureUrl && (
+                    <label className="flex items-center justify-between cursor-pointer mt-1">
+                      <span className="text-xs text-slate-600">Include signature image</span>
+                      <input type="checkbox" checked={expIncludeSig} onChange={e => setExpIncludeSig(e.target.checked)}
+                        className="rounded border-slate-300 text-brand-primary" />
+                    </label>
+                  )}
+                  {expSignatories.length === 0 && <p className="text-[10px] text-slate-400">Add signatories in Settings</p>}
+                </div>
+              </div>
+
+              {/* Preview strip */}
+              {(expLHMode !== "none" || expLogo || expStamp || expSigId) && (
+                <div className="bg-slate-900 rounded-xl p-3 text-[10px] text-slate-400 space-y-1">
+                  <p className="font-bold text-white text-xs mb-2">PDF will include:</p>
+                  {expLHMode === "full"   && <p>✓ Full page letterhead</p>}
+                  {expLHMode === "header" && <p>✓ Header + footer banner</p>}
+                  {expLogo && (currentCompany as any)?.logo && <p>✓ Company logo</p>}
+                  {expStamp && (currentCompany as any)?.stamp && <p>✓ Company stamp</p>}
+                  {expSigId && <p>✓ {expSignatories.find((s: any) => s.id === expSigId)?.name}</p>}
+                </div>
+              )}
+            </div>
+
+            {/* Generate button */}
+            <div className="p-5 border-t border-slate-100 shrink-0">
+              <button
+                disabled={expGenerating}
+                onClick={async () => {
+                  const win = window.open("", "_blank", "width=960,height=800");
+                  if (!win) { toast.error("Please allow popups"); return; }
+                  win.document.write("<html><body style='font-family:sans-serif;padding:40px;color:#555'>Generating Payslip...</body></html>");
+                  setExpGenerating(true);
+                  setShowExportPanel(false);
+                  try {
+                    const co = currentCompany as any;
+                    const selLH = expLetterheads.find((l: any) => l.id === expLHId) || expLetterheads[0];
+                    const lhUrl = selLH?.url || co?.fullLetterhead || "";
+                    const headerUrl = co?.headerAsset || co?.letterheadHeader || "";
+                    const footerUrl = co?.footerAsset || co?.letterheadFooter || "";
+                    const sigObj = expSignatories.find((s: any) => s.id === expSigId);
+
+                    // ── Build headerHTML / footerHTML / padTop / padBot ──
+                    let padTop = "12mm", padBot = "22mm";
+                    let headerHTML = "";
+
+                    if (expLHMode === "full" && lhUrl) {
+                      headerHTML = `<div style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1"><img src="${lhUrl}" style="width:100%;height:100%;object-fit:fill"/></div>`;
+                      padTop = "48mm";
+                    } else if (expLHMode === "header") {
+                      const hUrl = headerUrl || lhUrl;
+                      if (hUrl) {
+                        headerHTML = `<div style="position:fixed;top:0;left:0;width:100%;z-index:5;line-height:0"><img src="${hUrl}" style="width:100%;max-height:50mm;object-fit:cover;display:block"/></div>`;
+                        padTop = "55mm";
+                      }
+                    } else {
+                      const leftLines = [co?.address, co?.city ? co.city + ", KSA" : "", co?.phone,
+                        co?.vatNumber ? "VAT: " + co.vatNumber : "", co?.crNumber ? "CR: " + co.crNumber : ""]
+                        .filter(Boolean).map((l: string) => `<div style="font-size:7.5pt;color:#444;line-height:1.7">${l}</div>`).join("");
+                      headerHTML = `<table style="width:100%;border-bottom:2px solid #e2e8f0;margin-bottom:12px;border-collapse:collapse"><tr>
+                        <td style="width:38%;vertical-align:top;padding-bottom:10px"><div style="font-size:11pt;font-weight:700;margin-bottom:4px">${co?.name || ""}</div>${leftLines}</td>
+                        <td style="width:24%;text-align:center;vertical-align:middle;padding:0 8px 10px">
+                          ${expLogo && co?.logo ? `<img src="${co.logo}" style="max-height:55px;max-width:110px;object-fit:contain;display:block;margin:0 auto"/>` : ""}
+                        </td>
+                        <td style="width:38%;text-align:right;vertical-align:top;padding-bottom:10px">
+                          <div style="font-family:Cairo,Arial,sans-serif;font-size:11pt;font-weight:700;direction:rtl;margin-bottom:4px">${co?.nameAr || co?.name || ""}</div>
+                        </td>
+                      </tr></table>`;
+                    }
+
+                    const pgNum = `<div style="display:flex;justify-content:space-between;font-size:7pt;color:#888"><span>${co?.name || ""}</span><span>Payslip — ${employee.name} — ${month}</span><span>${new Date().toLocaleDateString()}</span></div>`;
+                    let footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;background:#fff;border-top:0.5px solid #e8ecf0;padding:5px 12mm;z-index:10">${pgNum}</div>`;
+                    if (expLHMode === "header" && footerUrl) {
+                      footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:5;background:#fff">
+                        <div style="padding:4px 12mm;border-top:0.5px solid #e8ecf0">${pgNum}</div>
+                        <img src="${footerUrl}" style="width:100%;max-height:25mm;object-fit:cover;display:block"/>
+                      </div>`;
+                      padBot = "32mm";
+                    }
+
+                    // ── Signatory block ──
+                    const sigHTML = (sigObj || (expStamp && co?.stamp)) ? `
+                      <div style="margin-top:20px;padding-top:12px;border-top:1.5px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+                        <div style="text-align:center;font-size:8pt">
+                          <div style="border-bottom:1px solid #1a1a1a;width:140px;margin:32px auto 5px"></div>
+                          <div style="font-weight:600">${employee.name}</div>
+                          <div style="color:#9ca3af;font-size:7.5pt">Employee Signature — توقيع الموظف</div>
+                        </div>
+                        ${sigObj ? `<div style="text-align:center;font-size:8pt">
+                          ${expIncludeSig && sigObj.signatureUrl ? `<img src="${sigObj.signatureUrl}" style="height:36px;max-width:100px;object-fit:contain;display:block;margin:0 auto 6px"/>` : `<div style="height:36px"></div>`}
+                          <div style="border-bottom:1.5px solid #1a1a1a;width:160px;margin-bottom:5px"></div>
+                          <div style="font-weight:700">${sigObj.name}</div>
+                          <div style="font-size:7.5pt;color:#6b7280">${sigObj.designation || "Authorized Signatory"}</div>
+                        </div>` : ""}
+                        ${expStamp && co?.stamp ? `<div style="text-align:center">
+                          <img src="${co.stamp}" style="width:75px;height:75px;object-fit:contain;opacity:0.8"/>
+                          <div style="font-size:7pt;color:#9ca3af;margin-top:3px">Company Stamp</div>
+                        </div>` : ""}
+                      </div>` : "";
+
+                    // ── Earnings/deductions rows ──
+                    const earningRows = [
+                      ["Basic Salary — الراتب الأساسي", employee.basicSalary],
+                      ["Housing Allowance — بدل السكن", employee.housingAllowance],
+                      ["Transport Allowance — بدل النقل", employee.transportAllowance],
+                      ...(employee.foodAllowance ? [["Food Allowance — بدل الطعام", employee.foodAllowance]] : []),
+                      ...(employee.otherAllowances ? [["Other Allowances", employee.otherAllowances]] : []),
+                      ...(overtimePay > 0 ? [[`Overtime (${overtimeHours}h × 150%)`, overtimePay]] : []),
+                    ].map(([label, val]) =>
+                      `<tr><td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt">${label}</td><td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right">${Number(val).toFixed(2)}</td></tr>`
+                    ).join("");
+
+                    const deductionRows = [
+                      ...(gosi.employee > 0 ? [[`GOSI Employee (${isSaudi(employee) ? "10%" : "0%"}) — اشتراك التأمينات`, gosi.employee]] : []),
+                      ...(absenceDed > 0 ? [[`Absence (${absenceDays} days)`, absenceDed]] : []),
+                      ...(lateDed > 0 ? [[`Late Deduction (${lateDays} days)`, lateDed]] : []),
+                      ...(advanceDeduction > 0 ? [["Advance Deduction — استقطاع سلفة", advanceDeduction]] : []),
+                      ...(otherDed > 0 ? [["Other Deductions", otherDed]] : []),
+                    ].map(([label, val]) =>
+                      `<tr><td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt">${label}</td><td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt;text-align:right;color:#dc2626">${Number(val).toFixed(2)}</td></tr>`
+                    ).join("");
+
+                    const html = [
+                      "<!DOCTYPE html><html><head><meta charset='UTF-8'/>",
+                      `<title>Payslip - ${employee.name} - ${month}</title>`,
+                      "<style>",
+                      "*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}",
+                      `body{font-family:Cairo,Arial,sans-serif;font-size:9pt;color:#1a1a1a;background:#fff;padding:${padTop} 12mm ${padBot}}`,
+                      `@media print{@page{size:A4;margin:0}body{padding:${padTop} 8mm ${padBot}}}`,
+                      "</style></head><body>",
+                      headerHTML,
+
+                      // Title
+                      `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+                        <div>
+                          <div style="font-size:18pt;font-weight:800;color:#1a1a1a">Payslip</div>
+                          <div style="font-size:10pt;color:#6b7280;margin-top:2px;font-family:Cairo,Arial,sans-serif;direction:rtl">كشف الراتب</div>
+                        </div>
+                        <div style="text-align:right">
+                          <div style="font-size:11pt;font-weight:700;color:#1e40af">${month}</div>
+                          <div style="font-size:8pt;color:#6b7280;margin-top:2px">Payment via Bank Transfer — WPS</div>
+                        </div>
+                      </div>`,
+
+                      // Employee info table
+                      `<table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;margin-bottom:14px">
+                        <tr>
+                          <td style="width:22%;padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Employee</td>
+                          <td style="width:28%;padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt;font-weight:600">${employee.name}</td>
+                          <td style="width:22%;padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151;font-family:Cairo,Arial,sans-serif;direction:rtl">الموظف</td>
+                          <td style="width:28%;padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt;direction:rtl;font-family:Cairo,Arial,sans-serif">${employee.nameAr}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Job Title</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${employee.role}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Department</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${employee.department || "—"}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">ID / Iqama</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${employee.nationalId || employee.iqamaNumber || "—"}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">GOSI ID</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${employee.gosiId || "—"}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Bank</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${employee.bankName || "—"}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">IBAN</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${employee.iban || "—"}</td>
+                        </tr>
+                      </table>`,
+
+                      // Earnings
+                      `<div style="display:flex;gap:12px;margin-bottom:14px">
+                        <div style="flex:1">
+                          <div style="background:#16a34a;color:#fff;padding:7px 10px;font-size:7.5pt;font-weight:800;letter-spacing:1px;text-transform:uppercase">Earnings — المستحقات</div>
+                          <table style="width:100%;border-collapse:collapse">
+                            ${earningRows}
+                            <tr style="background:#f0fdf4">
+                              <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;font-weight:700">Gross Salary — إجمالي الراتب</td>
+                              <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;font-weight:700;text-align:right">${(gross + overtimePay).toFixed(2)}</td>
+                            </tr>
+                          </table>
+                        </div>
+                        <div style="flex:1">
+                          <div style="background:#dc2626;color:#fff;padding:7px 10px;font-size:7.5pt;font-weight:800;letter-spacing:1px;text-transform:uppercase">Deductions — الاستقطاعات</div>
+                          <table style="width:100%;border-collapse:collapse">
+                            ${deductionRows || `<tr><td colspan="2" style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8pt;color:#9ca3af">No deductions</td></tr>`}
+                            <tr style="background:#fef2f2">
+                              <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;font-weight:700">Total Deductions</td>
+                              <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;font-weight:700;text-align:right;color:#dc2626">${totalDed.toFixed(2)}</td>
+                            </tr>
+                          </table>
+                        </div>
+                      </div>`,
+
+                      // Net salary
+                      `<table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+                        <tr style="background:#1e3a8a">
+                          <td style="padding:10px 12px;font-size:11pt;font-weight:800;color:#fff">NET SALARY — صافي الراتب</td>
+                          <td style="padding:10px 12px;font-size:11pt;font-weight:800;color:#fff;text-align:right">SAR ${net.toFixed(2)}</td>
+                        </tr>
+                      </table>`,
+
+                      // Amount in Arabic words
+                      `<div style="padding:7px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;font-size:8pt;color:#166534;margin-bottom:8px">
+                        المبلغ كتابةً: ${numberToArabicWords(Math.round(net))}
+                      </div>`,
+
+                      // Employer GOSI note
+                      gosi.employer > 0 ? `<div style="padding:6px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;font-size:7.5pt;color:#1e40af;margin-bottom:14px">
+                        Employer GOSI Contribution (${isSaudi(employee) ? "12%" : "2%"}): SAR ${gosi.employer.toFixed(2)} — paid by employer (not deducted from salary)
+                      </div>` : "",
+
+                      sigHTML,
+                      footerHTML,
+                      "<script>window.onload=function(){setTimeout(function(){window.print()},1200)}</script>",
+                      "</body></html>",
+                    ].join("\n");
+
+                    win.document.open(); win.document.write(html); win.document.close();
+                  } catch (e) { win?.close(); toast.error("Failed to generate payslip"); }
+                  finally { setExpGenerating(false); }
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-brand-primary text-white rounded-xl font-semibold text-sm transition-colors disabled:opacity-50"
+              >
+                <FileText className="h-4 w-4" />
+                {expGenerating ? "Generating..." : (language === "ar" ? "تحميل PDF" : "Download PDF")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
