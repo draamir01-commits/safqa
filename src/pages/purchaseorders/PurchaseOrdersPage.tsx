@@ -102,6 +102,12 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [formStatus, setFormStatus] = React.useState<POStatus>("draft");
   const [signatoryId, setSignatoryId] = React.useState("");
   const [notes, setNotes] = React.useState("");
+  const DEFAULT_TC = `1. All prices are in Saudi Riyals (SAR) and inclusive of VAT unless stated otherwise.
+2. Delivery must be made within the agreed timeframe. Late deliveries may be subject to penalties.
+3. Goods must match the specifications in this purchase order. Non-conforming goods will be returned at the supplier's cost.
+4. Payment will be processed upon receipt and inspection of goods/services.
+5. This purchase order constitutes a binding contract upon acceptance by the supplier.`;
+  const [termsAndConditions, setTermsAndConditions] = React.useState(DEFAULT_TC);
   const [projects, setProjects] = React.useState<any[]>([]);
   const [signatories, setSignatories] = React.useState<any[]>([]);
   const [lines, setLines] = React.useState<LineItem[]>([
@@ -219,7 +225,7 @@ export const PurchaseOrdersPage: React.FC = () => {
         signatoryId, signatoryName: sigObj?.name || "",
         status: formStatus,
         lineItems: lines, ...totals,
-        currency: "SAR", notes,
+        currency: "SAR", notes, termsAndConditions,
         createdBy: user.uid, createdAt: new Date(), updatedAt: new Date(),
         attachments,
       });
@@ -262,6 +268,7 @@ export const PurchaseOrdersPage: React.FC = () => {
     setSignatoryId(p.signatoryId || "");
     setFormStatus(po.status);
     setNotes(po.notes || "");
+    setTermsAndConditions((p.termsAndConditions as string) || DEFAULT_TC);
     setAttachments(p.attachments || []);
     const savedLines = po.lineItems || [];
     setLines(savedLines.length > 0 ? savedLines : [{ productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
@@ -290,7 +297,7 @@ export const PurchaseOrdersPage: React.FC = () => {
         signatoryId, signatoryName: sigObj?.name || "",
         status: formStatus,
         lineItems: lines, ...totals,
-        notes, attachments,
+        notes, termsAndConditions, attachments,
         updatedAt: new Date(),
       });
       toast.success(language === "ar" ? "تم تحديث أمر الشراء" : "Purchase order updated");
@@ -305,7 +312,7 @@ export const PurchaseOrdersPage: React.FC = () => {
   };
 
   const resetForm = () => {
-    setSupplierId(""); setSupplierNameManual(""); setContactPerson("");
+    setSupplierId(""); setSupplierNameManual(""); setContactPerson(""); setTermsAndConditions(DEFAULT_TC);
     setSupplierPhone(""); setSupplierEmail(""); setPaymentTerms("Net 30");
     setDeliveryAddress(""); setProjectId(""); setProjectName("");
     setSignatoryId(""); setFormStatus("draft"); setNotes(""); setAttachments([]);
@@ -428,7 +435,7 @@ export const PurchaseOrdersPage: React.FC = () => {
 
       {/* New PO Modal */}
       <Modal isOpen={showForm} onClose={() => { setShowForm(false); resetForm(); }}
-        title="">
+        title="" size="xl">
         <div className="flex flex-col gap-0 -mt-2">
 
           {/* Modal header */}
@@ -673,14 +680,31 @@ export const PurchaseOrdersPage: React.FC = () => {
           </div>
 
           {/* ── NOTES / TERMS ── */}
-          <div className="mt-5">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات / الشروط" : "Notes / Terms"}</span>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-3.5 w-3.5 text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات" : "Notes"}</span>
+              </div>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5}
+                placeholder={language === "ar" ? "ملاحظات إضافية..." : "Additional notes..."}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
             </div>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-              placeholder={language === "ar" ? "ملاحظات إضافية، شروط وأحكام..." : "Additional notes, terms and conditions..."}
-              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-3.5 w-3.5 text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الشروط والأحكام" : "Terms & Conditions"}</span>
+                </div>
+                <button type="button" onClick={() => setTermsAndConditions(DEFAULT_TC)}
+                  className="text-[10px] text-brand-primary hover:underline font-semibold">
+                  {language === "ar" ? "إعادة تعيين" : "Reset to default"}
+                </button>
+              </div>
+              <textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)} rows={5}
+                placeholder={language === "ar" ? "الشروط والأحكام..." : "Terms and conditions..."}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-y" />
+            </div>
           </div>
 
           {/* ── AUTHORIZED SIGNATORY ── */}
@@ -713,7 +737,7 @@ export const PurchaseOrdersPage: React.FC = () => {
 
       {/* Edit PO Modal */}
       <Modal isOpen={showEditForm} onClose={() => { setShowEditForm(false); setEditingPO(null); resetForm(); }}
-        title="">
+        title="" size="xl">
         <div className="flex flex-col gap-0 -mt-2">
 
           {/* Modal header */}
@@ -945,14 +969,31 @@ export const PurchaseOrdersPage: React.FC = () => {
           </div>
 
           {/* ── NOTES / TERMS ── */}
-          <div className="mt-5">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات / الشروط" : "Notes / Terms"}</span>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-3.5 w-3.5 text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات" : "Notes"}</span>
+              </div>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5}
+                placeholder={language === "ar" ? "ملاحظات إضافية..." : "Additional notes..."}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
             </div>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-              placeholder={language === "ar" ? "ملاحظات إضافية، شروط وأحكام..." : "Additional notes, terms and conditions..."}
-              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-3.5 w-3.5 text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الشروط والأحكام" : "Terms & Conditions"}</span>
+                </div>
+                <button type="button" onClick={() => setTermsAndConditions(DEFAULT_TC)}
+                  className="text-[10px] text-brand-primary hover:underline font-semibold">
+                  {language === "ar" ? "إعادة تعيين" : "Reset to default"}
+                </button>
+              </div>
+              <textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)} rows={5}
+                placeholder={language === "ar" ? "الشروط والأحكام..." : "Terms and conditions..."}
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-y" />
+            </div>
           </div>
 
           {/* ── AUTHORIZED SIGNATORY ── */}
@@ -1304,17 +1345,17 @@ export const PurchaseOrdersPage: React.FC = () => {
                           <div style="font-size:8.5pt;color:#1a1a1a;line-height:1.6">${po.notes}</div>
                         </div>` : "",
 
-                      // ── Terms & Conditions ──
-                      `<div style="margin-bottom:24px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
-                        <div style="font-size:8pt;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Terms & Conditions</div>
-                        <div style="font-size:7.5pt;color:#4b5563;line-height:1.8">
-                          <div>1. All prices are in Saudi Riyals (SAR) and inclusive of VAT unless stated otherwise.</div>
-                          <div>2. Delivery must be made within the agreed timeframe. Late deliveries may be subject to penalties.</div>
-                          <div>3. Goods must match the specifications in this purchase order. Non-conforming goods will be returned at the supplier's cost.</div>
-                          <div>4. Payment will be processed upon receipt and inspection of goods/services.</div>
-                          <div>5. This purchase order constitutes a binding contract upon acceptance by the supplier.</div>
-                        </div>
-                      </div>`,
+                      // ── Terms & Conditions (from PO record, editable) ──
+                      (() => {
+                        const tc = (po as any).termsAndConditions || "";
+                        if (!tc.trim()) return "";
+                        const lines = tc.split("\n").filter((l: string) => l.trim());
+                        const linesHTML = lines.map((l: string) => `<div style="margin-bottom:3px">${l}</div>`).join("");
+                        return `<div style="margin-bottom:24px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
+                          <div style="font-size:8pt;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Terms &amp; Conditions</div>
+                          <div style="font-size:7.5pt;color:#4b5563;line-height:1.8">${linesHTML}</div>
+                        </div>`;
+                      })(),
 
                       sigHTML,
                       footerHTML,
