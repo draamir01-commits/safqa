@@ -349,7 +349,15 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const updateList = (key: keyof CustomList, items: string[]) => setLists(prev => ({ ...prev, [key]: items }));
+  const updateList = (key: keyof CustomList, items: string[]) => {
+    const updated = { ...lists, [key]: items };
+    setLists(updated);
+    // Auto-persist the lists document so users don't have to remember to click Save
+    if (currentCompany) {
+      setDoc(doc(db, "companies", currentCompany.id, "settings", "lists"), updated, { merge: true })
+        .catch(err => console.error("Auto-save lists failed:", err));
+    }
+  };
   const addToList = (key: keyof CustomList, val: string) => updateList(key, [...lists[key], val]);
   const removeFromList = (key: keyof CustomList, idx: number) => updateList(key, lists[key].filter((_, i) => i !== idx));
 
