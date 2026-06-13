@@ -619,29 +619,69 @@ export const PurchaseOrdersPage: React.FC = () => {
                       footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:5;background:#fff"><div style="padding:4px 12mm;border-top:0.5px solid #e8ecf0;display:flex;justify-content:space-between;font-size:7pt;color:#888"><span>${co?.name||""}</span><span>${new Date().toLocaleDateString()}</span></div><img src="${footerUrl}" style="width:100%;max-height:25mm;object-fit:cover;display:block"/></div>`;
                       padBot = "32mm";
                     }
-                    const rows = (orders as any[]).map((row: any, i: number) => {
-                      const cells = [String(row.poNumber||""), String(row.supplierName||""), String(row.grandTotal||""), String(row.status||"")];
-                      return `<tr style="background:${i%2===0?"#fff":"#f8fafc"}">` + cells.map(v=>`<td style="padding:5px 8px;border:0.5px solid #e2e8f0;font-size:8pt">${v}</td>`).join("") + "</tr>";
-                    }).join("");
-                    const sigHTML = (sigObj || (expStamp && co?.stamp)) ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px"><div style="flex:1">${sigObj ? `<div style="font-size:9pt;font-weight:700;margin-bottom:12px">Authorized Signatory</div>${expIncludeSig && sigObj.signatureUrl ? `<img src="${sigObj.signatureUrl}" style="height:36px;max-width:100px;object-fit:contain;display:block;margin-bottom:6px"/>` : `<div style="height:36px"></div>`}<div style="border-bottom:1.5px solid #333;width:160px;margin-bottom:5px"></div><div style="font-size:9.5pt;font-weight:700">${sigObj.name}</div><div style="font-size:8pt;color:#555">${sigObj.designation||""}</div>` : ""}</div>${expStamp && co?.stamp ? `<div style="text-align:center"><img src="${co.stamp}" style="width:80px;height:80px;object-fit:contain"/><div style="font-size:7pt;color:#888;margin-top:4px">Company Stamp</div></div>` : ""}</div>` : "";
+                    // ── Build per-PO detail PDF ──────────────────────────────
+                    const po = selected;
+                    if (!po) { win?.close(); toast.error("No purchase order selected"); return; }
+
+                    const lineRows = (po.lineItems || []).map((l: any, i: number) => `
+                      <tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"}">
+                        <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt">${l.name || ""}${l.nameAr ? `<div style="font-size:7.5pt;color:#666;direction:rtl">${l.nameAr}</div>` : ""}</td>
+                        <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;text-align:center">${l.qty ?? ""}</td>
+                        <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;text-align:center">${l.unit || ""}</td>
+                        <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;text-align:right">${Number(l.unitPrice || 0).toFixed(2)}</td>
+                        <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;text-align:right">${Number(l.vatRate || 0)}%</td>
+                        <td style="padding:6px 8px;border:0.5px solid #e2e8f0;font-size:8.5pt;text-align:right;font-weight:600">${Number(l.lineTotal || 0).toFixed(2)}</td>
+                      </tr>`).join("");
+
+                    const statusMap: Record<string, string> = { draft: "Draft", sent: "Sent", approved: "Approved", received: "Received", cancelled: "Cancelled" };
+
+                    const sigHTML = (sigObj || (expStamp && co?.stamp)) ? `<div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px"><div style="flex:1">${sigObj ? `<div style="font-size:9pt;font-weight:700;margin-bottom:12px">Authorized Signatory</div>${expIncludeSig && sigObj.signatureUrl ? `<img src="${sigObj.signatureUrl}" style="height:36px;max-width:100px;object-fit:contain;display:block;margin-bottom:6px"/>` : `<div style="height:36px"></div>`}<div style="border-bottom:1.5px solid #333;width:160px;margin-bottom:5px"></div><div style="font-size:9.5pt;font-weight:700">${sigObj.name}</div><div style="font-size:8pt;color:#555">${sigObj.designation || ""}</div>` : ""}</div>${expStamp && co?.stamp ? `<div style="text-align:center"><img src="${co.stamp}" style="width:80px;height:80px;object-fit:contain"/><div style="font-size:7pt;color:#888;margin-top:4px">Company Stamp</div></div>` : ""}</div>` : "";
+
                     const html = [
                       "<!DOCTYPE html><html><head><meta charset='UTF-8'/>",
-                      "<title>Purchase Orders</title>",
+                      `<title>Purchase Order ${po.poNumber || ""}</title>`,
                       "<style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important}",
                       `body{font-family:Cairo,Arial,sans-serif;font-size:9pt;color:#1a1a1a;background:#fff;padding:${padTop} 12mm ${padBot}}`,
                       `@media print{@page{size:A4;margin:0}body{padding:${padTop} 8mm ${padBot}}}`,
                       "</style></head><body>",
                       headerHTML,
-                      "<div style='text-align:center;margin:8px 0 12px'>",
-                      "<span style='font-size:18pt;font-weight:800'>Purchase Orders</span>",
+
+                      // ── Title ──
+                      "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px'>",
+                      `<div><div style='font-size:18pt;font-weight:800;color:#0f2d6b'>Purchase Order</div><div style='font-size:9pt;color:#555;margin-top:2px;font-family:Cairo,Arial,sans-serif;direction:rtl'>أمر شراء</div></div>`,
+                      `<div style='text-align:right'><div style='font-size:13pt;font-weight:700;color:#0f2d6b'>${po.poNumber || ""}</div><div style='margin-top:4px;display:inline-block;padding:2px 10px;border-radius:20px;font-size:7.5pt;font-weight:700;background:${po.status === "approved" ? "#d1fae5" : po.status === "received" ? "#ede9fe" : po.status === "cancelled" ? "#fee2e2" : "#f1f5f9"};color:${po.status === "approved" ? "#065f46" : po.status === "received" ? "#5b21b6" : po.status === "cancelled" ? "#991b1b" : "#475569"}'>${statusMap[po.status] || po.status}</div></div>`,
                       "</div>",
-                      "<div style='border-top:2px solid #e2e8f0;margin-bottom:12px'></div>",
-                      "<table style='width:100%;border-collapse:collapse;margin-bottom:12px'>",
-                      "<thead><tr style='background:#2d3748;color:#fff'>",
-                      "<th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">PO #</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Supplier</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Total</th><th style=\"padding:6px 10px;text-align:left;border:0.5px solid #4a5568;font-size:7.5pt\">Status</th>",
+                      "<div style='border-top:2px solid #e2e8f0;margin-bottom:14px'></div>",
+
+                      // ── Meta info grid ──
+                      "<table style='width:100%;border-collapse:collapse;margin-bottom:14px'>",
+                      "<tr>",
+                      `<td style='width:50%;vertical-align:top;padding-right:12px'><div style='font-size:7pt;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px'>Supplier</div><div style='font-weight:700;font-size:10pt'>${po.supplierName || ""}</div>${po.supplierNameAr ? `<div style='font-size:8.5pt;color:#555;direction:rtl;font-family:Cairo,Arial,sans-serif'>${po.supplierNameAr}</div>` : ""}</td>`,
+                      `<td style='width:50%;vertical-align:top'><table style='width:100%;border-collapse:collapse'><tr><td style='padding:3px 8px 3px 0;font-size:7.5pt;color:#888;white-space:nowrap'>Issue Date</td><td style='padding:3px 0;font-size:8.5pt;font-weight:600'>${po.issueDate || ""}</td></tr><tr><td style='padding:3px 8px 3px 0;font-size:7.5pt;color:#888;white-space:nowrap'>Expected Delivery</td><td style='padding:3px 0;font-size:8.5pt;font-weight:600'>${po.expectedDate || ""}</td></tr>${po.notes ? `<tr><td style='padding:3px 8px 3px 0;font-size:7.5pt;color:#888;white-space:nowrap'>Notes</td><td style='padding:3px 0;font-size:8.5pt'>${po.notes}</td></tr>` : ""}</table></td>`,
+                      "</tr></table>",
+
+                      // ── Line items table ──
+                      "<table style='width:100%;border-collapse:collapse;margin-bottom:14px'>",
+                      "<thead><tr style='background:#0f2d6b;color:#fff'>",
+                      "<th style='padding:7px 8px;text-align:left;font-size:7.5pt;border:0.5px solid #1e3a8a'>Item / Description</th>",
+                      "<th style='padding:7px 8px;text-align:center;font-size:7.5pt;border:0.5px solid #1e3a8a;width:48px'>Qty</th>",
+                      "<th style='padding:7px 8px;text-align:center;font-size:7.5pt;border:0.5px solid #1e3a8a;width:48px'>Unit</th>",
+                      "<th style='padding:7px 8px;text-align:right;font-size:7.5pt;border:0.5px solid #1e3a8a;width:80px'>Unit Price</th>",
+                      "<th style='padding:7px 8px;text-align:right;font-size:7.5pt;border:0.5px solid #1e3a8a;width:48px'>VAT</th>",
+                      "<th style='padding:7px 8px;text-align:right;font-size:7.5pt;border:0.5px solid #1e3a8a;width:90px'>Line Total</th>",
                       "</tr></thead>",
-                      `<tbody>${rows}</tbody>`,
+                      `<tbody>${lineRows || "<tr><td colspan='6' style='padding:12px;text-align:center;color:#888;font-size:8pt'>No items</td></tr>"}</tbody>`,
                       "</table>",
+
+                      // ── Totals ──
+                      "<div style='display:flex;justify-content:flex-end;margin-bottom:16px'>",
+                      "<table style='border-collapse:collapse;min-width:220px'>",
+                      `<tr><td style='padding:4px 12px 4px 0;font-size:8pt;color:#555'>Subtotal</td><td style='padding:4px 0;font-size:8pt;text-align:right'>SAR ${Number(po.subtotal || 0).toFixed(2)}</td></tr>`,
+                      `<tr><td style='padding:4px 12px 4px 0;font-size:8pt;color:#555'>VAT</td><td style='padding:4px 0;font-size:8pt;text-align:right'>SAR ${Number(po.totalVat || 0).toFixed(2)}</td></tr>`,
+                      `<tr style='border-top:1.5px solid #1a1a1a'><td style='padding:6px 12px 6px 0;font-size:10pt;font-weight:700'>Total (SAR)</td><td style='padding:6px 0;font-size:10pt;font-weight:700;text-align:right'>SAR ${Number(po.grandTotal || 0).toFixed(2)}</td></tr>`,
+                      "</table>",
+                      "</div>",
+
                       sigHTML,
                       footerHTML,
                       "<script>window.onload=function(){setTimeout(function(){window.print()},1200)}</script>",
