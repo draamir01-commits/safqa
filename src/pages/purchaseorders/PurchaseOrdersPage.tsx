@@ -102,12 +102,14 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [formStatus, setFormStatus] = React.useState<POStatus>("draft");
   const [signatoryId, setSignatoryId] = React.useState("");
   const [notes, setNotes] = React.useState("");
-  const DEFAULT_TC = `1. All prices are in Saudi Riyals (SAR) and inclusive of VAT unless stated otherwise.
-2. Delivery must be made within the agreed timeframe. Late deliveries may be subject to penalties.
-3. Goods must match the specifications in this purchase order. Non-conforming goods will be returned at the supplier's cost.
-4. Payment will be processed upon receipt and inspection of goods/services.
-5. This purchase order constitutes a binding contract upon acceptance by the supplier.`;
-  const [termsAndConditions, setTermsAndConditions] = React.useState(DEFAULT_TC);
+  const DEFAULT_TC: string[] = [
+    "All prices are in Saudi Riyals (SAR) and inclusive of VAT unless stated otherwise.",
+    "Delivery must be made within the agreed timeframe. Late deliveries may be subject to penalties.",
+    "Goods must match the specifications in this purchase order. Non-conforming goods will be returned at the supplier's cost.",
+    "Payment will be processed upon receipt and inspection of goods/services.",
+    "This purchase order constitutes a binding contract upon acceptance by the supplier.",
+  ];
+  const [tcLines, setTcLines] = React.useState<string[]>(DEFAULT_TC);
   const [projects, setProjects] = React.useState<any[]>([]);
   const [signatories, setSignatories] = React.useState<any[]>([]);
   const [lines, setLines] = React.useState<LineItem[]>([
@@ -225,7 +227,7 @@ export const PurchaseOrdersPage: React.FC = () => {
         signatoryId, signatoryName: sigObj?.name || "",
         status: formStatus,
         lineItems: lines, ...totals,
-        currency: "SAR", notes, termsAndConditions,
+        currency: "SAR", notes, tcLines,
         createdBy: user.uid, createdAt: new Date(), updatedAt: new Date(),
         attachments,
       });
@@ -268,7 +270,7 @@ export const PurchaseOrdersPage: React.FC = () => {
     setSignatoryId(p.signatoryId || "");
     setFormStatus(po.status);
     setNotes(po.notes || "");
-    setTermsAndConditions((p.termsAndConditions as string) || DEFAULT_TC);
+    setTcLines(Array.isArray(p.tcLines) && p.tcLines.length > 0 ? p.tcLines : DEFAULT_TC);
     setAttachments(p.attachments || []);
     const savedLines = po.lineItems || [];
     setLines(savedLines.length > 0 ? savedLines : [{ productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
@@ -297,7 +299,7 @@ export const PurchaseOrdersPage: React.FC = () => {
         signatoryId, signatoryName: sigObj?.name || "",
         status: formStatus,
         lineItems: lines, ...totals,
-        notes, termsAndConditions, attachments,
+        notes, tcLines, attachments,
         updatedAt: new Date(),
       });
       toast.success(language === "ar" ? "تم تحديث أمر الشراء" : "Purchase order updated");
@@ -312,7 +314,7 @@ export const PurchaseOrdersPage: React.FC = () => {
   };
 
   const resetForm = () => {
-    setSupplierId(""); setSupplierNameManual(""); setContactPerson(""); setTermsAndConditions(DEFAULT_TC);
+    setSupplierId(""); setSupplierNameManual(""); setContactPerson(""); setTcLines([...DEFAULT_TC]);
     setSupplierPhone(""); setSupplierEmail(""); setPaymentTerms("Net 30");
     setDeliveryAddress(""); setProjectId(""); setProjectName("");
     setSignatoryId(""); setFormStatus("draft"); setNotes(""); setAttachments([]);
@@ -679,31 +681,46 @@ export const PurchaseOrdersPage: React.FC = () => {
             </div>
           </div>
 
-          {/* ── NOTES / TERMS ── */}
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ── NOTES + TERMS ── */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Notes */}
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1.5">
                 <FileText className="h-3.5 w-3.5 text-slate-400" />
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات" : "Notes"}</span>
               </div>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5}
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
                 placeholder={language === "ar" ? "ملاحظات إضافية..." : "Additional notes..."}
-                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary resize-none" />
             </div>
+            {/* Terms & Conditions — individual editable lines */}
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-3.5 w-3.5 text-slate-400" />
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الشروط والأحكام" : "Terms & Conditions"}</span>
                 </div>
-                <button type="button" onClick={() => setTermsAndConditions(DEFAULT_TC)}
-                  className="text-[10px] text-brand-primary hover:underline font-semibold">
-                  {language === "ar" ? "إعادة تعيين" : "Reset to default"}
-                </button>
+                <button type="button" onClick={() => setTcLines([...DEFAULT_TC])}
+                  className="text-[10px] text-brand-primary hover:underline font-semibold">Reset</button>
               </div>
-              <textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)} rows={5}
-                placeholder={language === "ar" ? "الشروط والأحكام..." : "Terms and conditions..."}
-                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-y" />
+              <div className="space-y-1 max-h-28 overflow-y-auto pr-0.5">
+                {tcLines.map((line, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{i + 1}.</span>
+                    <input value={line} onChange={e => { const u = [...tcLines]; u[i] = e.target.value; setTcLines(u); }}
+                      className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:border-brand-primary" />
+                    <button type="button" onClick={() => setTcLines(tcLines.filter((_, j) => j !== i))}
+                      className="text-slate-300 hover:text-red-500 transition-colors shrink-0">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button"
+                onClick={() => setTcLines([...tcLines, ""])}
+                className="mt-1.5 text-[10px] text-brand-primary hover:underline font-semibold flex items-center gap-1">
+                <Plus className="h-2.5 w-2.5" />{language === "ar" ? "إضافة شرط" : "Add line"}
+              </button>
             </div>
           </div>
 
@@ -968,31 +985,46 @@ export const PurchaseOrdersPage: React.FC = () => {
             </div>
           </div>
 
-          {/* ── NOTES / TERMS ── */}
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ── NOTES + TERMS ── */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Notes */}
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1.5">
                 <FileText className="h-3.5 w-3.5 text-slate-400" />
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الملاحظات" : "Notes"}</span>
               </div>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5}
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
                 placeholder={language === "ar" ? "ملاحظات إضافية..." : "Additional notes..."}
-                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-none" />
+                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-primary resize-none" />
             </div>
+            {/* Terms & Conditions — individual editable lines */}
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-3.5 w-3.5 text-slate-400" />
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === "ar" ? "الشروط والأحكام" : "Terms & Conditions"}</span>
                 </div>
-                <button type="button" onClick={() => setTermsAndConditions(DEFAULT_TC)}
-                  className="text-[10px] text-brand-primary hover:underline font-semibold">
-                  {language === "ar" ? "إعادة تعيين" : "Reset to default"}
-                </button>
+                <button type="button" onClick={() => setTcLines([...DEFAULT_TC])}
+                  className="text-[10px] text-brand-primary hover:underline font-semibold">Reset</button>
               </div>
-              <textarea value={termsAndConditions} onChange={e => setTermsAndConditions(e.target.value)} rows={5}
-                placeholder={language === "ar" ? "الشروط والأحكام..." : "Terms and conditions..."}
-                className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-brand-primary resize-y" />
+              <div className="space-y-1 max-h-28 overflow-y-auto pr-0.5">
+                {tcLines.map((line, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{i + 1}.</span>
+                    <input value={line} onChange={e => { const u = [...tcLines]; u[i] = e.target.value; setTcLines(u); }}
+                      className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:border-brand-primary" />
+                    <button type="button" onClick={() => setTcLines(tcLines.filter((_, j) => j !== i))}
+                      className="text-slate-300 hover:text-red-500 transition-colors shrink-0">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button"
+                onClick={() => setTcLines([...tcLines, ""])}
+                className="mt-1.5 text-[10px] text-brand-primary hover:underline font-semibold flex items-center gap-1">
+                <Plus className="h-2.5 w-2.5" />{language === "ar" ? "إضافة شرط" : "Add line"}
+              </button>
             </div>
           </div>
 
@@ -1276,14 +1308,20 @@ export const PurchaseOrdersPage: React.FC = () => {
                           <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Date</td>
                           <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${po.issueDate || ""}</td>
                         </tr>
-                        ${supplierRecord?.phone ? `<tr>
+                        ${(po as any).contactPerson ? `<tr>
+                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Contact Person</td>
+                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt">${(po as any).contactPerson}</td>
+                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Delivery Date</td>
+                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${po.expectedDate || ""}</td>
+                        </tr>` : ""}
+                        ${((po as any).supplierPhone || supplierRecord?.phone) ? `<tr>
                           <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Phone</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt">${supplierRecord.phone}</td>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Delivery Date</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${po.expectedDate || ""}</td>
+                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt">${(po as any).supplierPhone || supplierRecord?.phone || ""}</td>
+                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">${!(po as any).contactPerson ? "Delivery Date" : ""}</td>
+                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${!(po as any).contactPerson ? (po.expectedDate || "") : ""}</td>
                         </tr>` : `<tr>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Delivery Date</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${po.expectedDate || ""}</td>
+                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">${!(po as any).contactPerson ? "Delivery Date" : ""}</td>
+                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${!(po as any).contactPerson ? (po.expectedDate || "") : ""}</td>
                           <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151"></td>
                           <td style="padding:8px 12px;border:1px solid #cbd5e1"></td>
                         </tr>`}
@@ -1345,15 +1383,19 @@ export const PurchaseOrdersPage: React.FC = () => {
                           <div style="font-size:8.5pt;color:#1a1a1a;line-height:1.6">${po.notes}</div>
                         </div>` : "",
 
-                      // ── Terms & Conditions (from PO record, editable) ──
+                      // ── Terms & Conditions (array of lines) ──
                       (() => {
-                        const tc = (po as any).termsAndConditions || "";
-                        if (!tc.trim()) return "";
-                        const lines = tc.split("\n").filter((l: string) => l.trim());
-                        const linesHTML = lines.map((l: string) => `<div style="margin-bottom:3px">${l}</div>`).join("");
-                        return `<div style="margin-bottom:24px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
-                          <div style="font-size:8pt;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Terms &amp; Conditions</div>
-                          <div style="font-size:7.5pt;color:#4b5563;line-height:1.8">${linesHTML}</div>
+                        const tcArr: string[] = Array.isArray((po as any).tcLines) && (po as any).tcLines.length > 0
+                          ? (po as any).tcLines
+                          : [];
+                        if (tcArr.length === 0) return "";
+                        const linesHTML = tcArr
+                          .filter((l: string) => l.trim())
+                          .map((l: string, i: number) => `<div style="margin-bottom:4px"><span style="font-weight:600">${i + 1}.</span> ${l}</div>`)
+                          .join("");
+                        return `<div style="margin-bottom:20px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
+                          <div style="font-size:8pt;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px">Terms &amp; Conditions</div>
+                          <div style="font-size:7.5pt;color:#4b5563;line-height:1.7">${linesHTML}</div>
                         </div>`;
                       })(),
 
