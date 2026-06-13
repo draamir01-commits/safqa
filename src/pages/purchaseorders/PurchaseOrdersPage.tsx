@@ -135,7 +135,14 @@ export const PurchaseOrdersPage: React.FC = () => {
         setLineUnits(prev => { const u=[...prev]; u[idx]=pu; return u; });
       }
     }
-    updated[idx] = calculateLineItem(updated[idx]);
+    const line = updated[idx];
+    const calc = calculateLineItem(
+      line.qty,
+      line.unitPrice,
+      line.discountPercent,
+      line.vatRate as 0 | 5 | 15
+    );
+    updated[idx] = { ...line, ...calc };
     setLines(updated);
   };
 
