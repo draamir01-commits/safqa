@@ -1261,20 +1261,20 @@ export const PurchaseOrdersPage: React.FC = () => {
 
                     // ── Signatory + stamp ──
                     const sigHTML = (sigObj || (expStamp && co?.stamp)) ? `
-                      <div style="margin-top:24px;padding-top:14px;border-top:1.5px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+                      <div style="margin-top:10px;padding-top:10px;border-top:1.5px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
                         <div style="flex:1">
                           ${sigObj ? `
-                            <div style="font-size:8.5pt;font-weight:700;color:#374151;margin-bottom:14px;text-transform:uppercase;letter-spacing:0.5px">Authorized Signatory</div>
-                            ${expIncludeSig && sigObj.signatureUrl ? `<img src="${sigObj.signatureUrl}" style="height:40px;max-width:120px;object-fit:contain;display:block;margin-bottom:8px"/>` : `<div style="height:40px"></div>`}
-                            <div style="border-bottom:1.5px solid #1a1a1a;width:180px;margin-bottom:6px"></div>
-                            <div style="font-size:9.5pt;font-weight:700">${sigObj.name}</div>
-                            <div style="font-size:8pt;color:#6b7280;margin-top:2px">${sigObj.designation || ""}</div>
+                            <div style="font-size:7.5pt;font-weight:700;color:#374151;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Authorized Signatory</div>
+                            ${expIncludeSig && sigObj.signatureUrl ? `<img src="${sigObj.signatureUrl}" style="height:34px;max-width:100px;object-fit:contain;display:block;margin-bottom:6px"/>` : `<div style="height:34px"></div>`}
+                            <div style="border-bottom:1.5px solid #1a1a1a;width:160px;margin-bottom:5px"></div>
+                            <div style="font-size:9pt;font-weight:700">${sigObj.name}</div>
+                            <div style="font-size:7.5pt;color:#6b7280;margin-top:1px">${sigObj.designation || ""}</div>
                           ` : ""}
                         </div>
                         ${expStamp && co?.stamp ? `
                           <div style="text-align:center">
-                            <img src="${co.stamp}" style="width:85px;height:85px;object-fit:contain"/>
-                            <div style="font-size:7pt;color:#9ca3af;margin-top:4px">Company Stamp</div>
+                            <img src="${co.stamp}" style="width:75px;height:75px;object-fit:contain"/>
+                            <div style="font-size:7pt;color:#9ca3af;margin-top:3px">Company Stamp</div>
                           </div>` : ""}
                       </div>` : "";
 
@@ -1289,115 +1289,101 @@ export const PurchaseOrdersPage: React.FC = () => {
                       headerHTML,
 
                       // ── Document title ──
-                      `<div style="text-align:center;margin-bottom:18px">
-                        <div style="font-size:22pt;font-weight:800;color:#1a1a1a;letter-spacing:0.5px">Purchase Order</div>
-                        <div style="font-size:10pt;color:#6b7280;margin-top:3px;font-family:Cairo,Arial,sans-serif;direction:rtl">أمر شراء</div>
+                      `<div style="text-align:center;margin-bottom:12px">
+                        <div style="font-size:18pt;font-weight:800;color:#1a1a1a;letter-spacing:0.5px">Purchase Order</div>
+                        <div style="font-size:9pt;color:#6b7280;margin-top:2px;font-family:Cairo,Arial,sans-serif;direction:rtl">أمر شراء</div>
                       </div>`,
 
-                      // ── Supplier + PO info table (4 columns, 2 per side) ──
-                      `<table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;margin-bottom:18px">
+                      // ── Supplier + PO info table — no VAT Number row ──
+                      `<table style="width:100%;border-collapse:collapse;border:1px solid #cbd5e1;margin-bottom:12px">
                         <tr>
-                          <td style="width:22%;padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Supplier</td>
-                          <td style="width:28%;padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${po.supplierName || ""}${po.supplierNameAr ? `<div style="font-size:7.5pt;color:#6b7280;direction:rtl;font-family:Cairo,Arial,sans-serif;margin-top:2px">${po.supplierNameAr}</div>` : ""}</td>
-                          <td style="width:22%;padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">PO Number</td>
-                          <td style="width:28%;padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:700;color:#1e40af">${po.poNumber || ""}</td>
+                          <td style="width:22%;padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Supplier</td>
+                          <td style="width:28%;padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt;font-weight:600">${po.supplierName || ""}${po.supplierNameAr ? `<div style="font-size:7pt;color:#6b7280;direction:rtl;font-family:Cairo,Arial,sans-serif;margin-top:1px">${po.supplierNameAr}</div>` : ""}</td>
+                          <td style="width:22%;padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">PO Number</td>
+                          <td style="width:28%;padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#1e40af">${po.poNumber || ""}</td>
                         </tr>
                         <tr>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">VAT Number</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt">${supplierRecord?.vatNumber || ""}</td>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Date</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${po.issueDate || ""}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Date</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt;font-weight:600">${po.issueDate || ""}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Delivery Date</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt;font-weight:600">${po.expectedDate || ""}</td>
                         </tr>
                         ${(po as any).contactPerson ? `<tr>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Contact Person</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt">${(po as any).contactPerson}</td>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Delivery Date</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${po.expectedDate || ""}</td>
-                        </tr>` : ""}
-                        ${((po as any).supplierPhone || supplierRecord?.phone) ? `<tr>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Phone</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt">${(po as any).supplierPhone || supplierRecord?.phone || ""}</td>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">${!(po as any).contactPerson ? "Delivery Date" : ""}</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${!(po as any).contactPerson ? (po.expectedDate || "") : ""}</td>
-                        </tr>` : `<tr>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">${!(po as any).contactPerson ? "Delivery Date" : ""}</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt;font-weight:600">${!(po as any).contactPerson ? (po.expectedDate || "") : ""}</td>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151"></td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1"></td>
-                        </tr>`}
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Contact Person</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${(po as any).contactPerson}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">${((po as any).supplierPhone || supplierRecord?.phone) ? "Phone" : ""}</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${(po as any).supplierPhone || supplierRecord?.phone || ""}</td>
+                        </tr>` : `${((po as any).supplierPhone || supplierRecord?.phone) ? `<tr>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Phone</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt">${(po as any).supplierPhone || supplierRecord?.phone || ""}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1"></td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1"></td>
+                        </tr>` : ""}`}
                         ${(po as any).paymentTerms || supplierRecord?.paymentTerms ? `<tr>
-                          <td style="padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;font-size:8pt;font-weight:700;color:#374151">Payment Terms</td>
-                          <td style="padding:8px 12px;border:1px solid #cbd5e1;font-size:8.5pt" colspan="3">${(po as any).paymentTerms || supplierRecord?.paymentTerms || ""}</td>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Payment Terms</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt" colspan="3">${(po as any).paymentTerms || supplierRecord?.paymentTerms || ""}</td>
+                        </tr>` : ""}
+                        ${(po as any).deliveryAddress ? `<tr>
+                          <td style="padding:6px 10px;background:#f8fafc;border:1px solid #cbd5e1;font-size:7.5pt;font-weight:700;color:#374151">Delivery Address</td>
+                          <td style="padding:6px 10px;border:1px solid #cbd5e1;font-size:8pt" colspan="3">${(po as any).deliveryAddress}</td>
                         </tr>` : ""}
                       </table>`,
 
-                      // ── Delivery address (if set) ──
-                      (po as any).deliveryAddress ? `
-                        <div style="margin-bottom:14px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;display:flex;gap:10px;align-items:flex-start">
-                          <div style="font-size:7.5pt;font-weight:700;color:#374151;white-space:nowrap;min-width:100px">Delivery Address:</div>
-                          <div style="font-size:8.5pt;color:#1a1a1a">${(po as any).deliveryAddress}</div>
-                        </div>` : "",
-
                       // ── PURCHASE ORDER ITEMS banner ──
-                      `<div style="background:#3730a3;color:#fff;padding:10px 14px;font-size:9pt;font-weight:800;letter-spacing:1.5px;text-align:center;text-transform:uppercase;margin-bottom:0">
+                      `<div style="background:#3730a3;color:#fff;padding:8px 14px;font-size:8.5pt;font-weight:800;letter-spacing:1.5px;text-align:center;text-transform:uppercase;margin-bottom:0">
                         Purchase Order Items
                       </div>`,
 
                       // ── Line items table ──
-                      `<table style="width:100%;border-collapse:collapse;margin-bottom:18px;border:1px solid #cbd5e1">
+                      `<table style="width:100%;border-collapse:collapse;margin-bottom:12px;border:1px solid #cbd5e1">
                         <thead>
                           <tr style="background:#f1f5f9">
-                            <th style="padding:8px 10px;text-align:left;font-size:7.5pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151">Item / Description</th>
-                            <th style="padding:8px 10px;text-align:center;font-size:7.5pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:52px">Qty</th>
-                            <th style="padding:8px 10px;text-align:center;font-size:7.5pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:52px">Unit</th>
-                            <th style="padding:8px 10px;text-align:right;font-size:7.5pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:85px">Unit Price</th>
-                            <th style="padding:8px 10px;text-align:right;font-size:7.5pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:50px">VAT%</th>
-                            <th style="padding:8px 10px;text-align:right;font-size:7.5pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:90px">Amount (SAR)</th>
+                            <th style="padding:6px 8px;text-align:left;font-size:7pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151">Item / Description</th>
+                            <th style="padding:6px 8px;text-align:center;font-size:7pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:48px">Qty</th>
+                            <th style="padding:6px 8px;text-align:center;font-size:7pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:48px">Unit</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:7pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:80px">Unit Price</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:7pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:46px">VAT%</th>
+                            <th style="padding:6px 8px;text-align:right;font-size:7pt;font-weight:700;border:0.5px solid #cbd5e1;color:#374151;width:84px">Amount (SAR)</th>
                           </tr>
                         </thead>
-                        <tbody>${lineRows || "<tr><td colspan='6' style='padding:14px;text-align:center;color:#9ca3af;font-size:8pt'>No items recorded</td></tr>"}</tbody>
+                        <tbody>${lineRows || "<tr><td colspan='6' style='padding:12px;text-align:center;color:#9ca3af;font-size:8pt'>No items recorded</td></tr>"}</tbody>
                       </table>`,
 
                       // ── Totals (right-aligned) ──
-                      `<div style="display:flex;justify-content:flex-end;margin-bottom:20px">
-                        <table style="border-collapse:collapse;min-width:240px;border:1px solid #cbd5e1">
+                      `<div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+                        <table style="border-collapse:collapse;min-width:220px;border:1px solid #cbd5e1">
                           <tr style="background:#f8fafc">
-                            <td style="padding:7px 14px;font-size:8.5pt;color:#374151;border:0.5px solid #cbd5e1">Subtotal</td>
-                            <td style="padding:7px 14px;font-size:8.5pt;text-align:right;border:0.5px solid #cbd5e1">SAR ${Number(po.subtotal || 0).toFixed(2)}</td>
+                            <td style="padding:5px 12px;font-size:8pt;color:#374151;border:0.5px solid #cbd5e1">Subtotal</td>
+                            <td style="padding:5px 12px;font-size:8pt;text-align:right;border:0.5px solid #cbd5e1">SAR ${Number(po.subtotal || 0).toFixed(2)}</td>
                           </tr>
                           <tr>
-                            <td style="padding:7px 14px;font-size:8.5pt;color:#374151;border:0.5px solid #cbd5e1">VAT</td>
-                            <td style="padding:7px 14px;font-size:8.5pt;text-align:right;border:0.5px solid #cbd5e1">SAR ${Number(po.totalVat || 0).toFixed(2)}</td>
+                            <td style="padding:5px 12px;font-size:8pt;color:#374151;border:0.5px solid #cbd5e1">VAT</td>
+                            <td style="padding:5px 12px;font-size:8pt;text-align:right;border:0.5px solid #cbd5e1">SAR ${Number(po.totalVat || 0).toFixed(2)}</td>
                           </tr>
                           <tr style="background:#1e3a8a">
-                            <td style="padding:9px 14px;font-size:9.5pt;font-weight:800;color:#fff;border:0.5px solid #1e3a8a">Total (SAR)</td>
-                            <td style="padding:9px 14px;font-size:9.5pt;font-weight:800;color:#fff;text-align:right;border:0.5px solid #1e3a8a">SAR ${Number(po.grandTotal || 0).toFixed(2)}</td>
+                            <td style="padding:7px 12px;font-size:9pt;font-weight:800;color:#fff;border:0.5px solid #1e3a8a">Total (SAR)</td>
+                            <td style="padding:7px 12px;font-size:9pt;font-weight:800;color:#fff;text-align:right;border:0.5px solid #1e3a8a">SAR ${Number(po.grandTotal || 0).toFixed(2)}</td>
                           </tr>
                         </table>
                       </div>`,
 
-                      // ── Notes ──
-                      po.notes ? `
-                        <div style="margin-bottom:18px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:4px">
-                          <div style="font-size:8pt;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px">Notes</div>
-                          <div style="font-size:8.5pt;color:#1a1a1a;line-height:1.6">${po.notes}</div>
+                      // ── Notes + T&C side by side ──
+                      (po.notes || (Array.isArray((po as any).tcLines) && (po as any).tcLines.some((l: string) => l.trim()))) ? `
+                        <div style="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start">
+                          ${po.notes ? `<div style="flex:1;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;min-width:0">
+                            <div style="font-size:7pt;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Notes</div>
+                            <div style="font-size:7.5pt;color:#1a1a1a;line-height:1.5">${po.notes}</div>
+                          </div>` : ""}
+                          ${(() => {
+                            const tcArr: string[] = Array.isArray((po as any).tcLines) ? (po as any).tcLines.filter((l: string) => l.trim()) : [];
+                            if (tcArr.length === 0) return "";
+                            const linesHTML = tcArr.map((l: string, i: number) => `<div style="margin-bottom:2px"><span style="font-weight:600">${i+1}.</span> ${l}</div>`).join("");
+                            return `<div style="flex:2;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;min-width:0">
+                              <div style="font-size:7pt;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Terms &amp; Conditions</div>
+                              <div style="font-size:7pt;color:#4b5563;line-height:1.6">${linesHTML}</div>
+                            </div>`;
+                          })()}
                         </div>` : "",
-
-                      // ── Terms & Conditions (array of lines) ──
-                      (() => {
-                        const tcArr: string[] = Array.isArray((po as any).tcLines) && (po as any).tcLines.length > 0
-                          ? (po as any).tcLines
-                          : [];
-                        if (tcArr.length === 0) return "";
-                        const linesHTML = tcArr
-                          .filter((l: string) => l.trim())
-                          .map((l: string, i: number) => `<div style="margin-bottom:4px"><span style="font-weight:600">${i + 1}.</span> ${l}</div>`)
-                          .join("");
-                        return `<div style="margin-bottom:20px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px">
-                          <div style="font-size:8pt;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px">Terms &amp; Conditions</div>
-                          <div style="font-size:7.5pt;color:#4b5563;line-height:1.7">${linesHTML}</div>
-                        </div>`;
-                      })(),
 
                       sigHTML,
                       footerHTML,
