@@ -17,7 +17,7 @@ import Input from "../../components/ui/Input";
 import Select from "../../components/ui/Select";
 import { ExportMenu } from "../../components/ui/ExportMenu";
 import { db } from "../../firebase/config";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 
 const statusColor: Record<POStatus, string> = {
   draft: "bg-slate-100 text-slate-600",
@@ -97,17 +97,37 @@ export const PurchaseOrdersPage: React.FC = () => {
   const [lineModes, setLineModes] = React.useState<("select"|"manual")[]>(["select"]);
   // per-line custom unit text (when user types a custom unit)
   const [lineUnits, setLineUnits] = React.useState<string[]>(["PCE"]);
+  // per-line explicit custom-mode flag (decoupled from unit value so typing a preset name doesn't flip the UI)
+  const [lineCustomModes, setLineCustomModes] = React.useState<boolean[]>([false]);
 
-  const PRESET_UNITS = ["PCE","KG","LTR","MTR","HR","DAY","SRV","SET","BOX","TON","M2","M3","NOS","LS"];
+  const BASE_UNITS = ["PCE","KG","LTR","MTR","HR","DAY","SRV","SET","BOX","TON","M2","M3","NOS","LS"];
+  const [PRESET_UNITS, setPresetUnits] = React.useState<string[]>(BASE_UNITS);
+
+  // Load saved units from company settings
+  React.useEffect(() => {
+    if (!currentCompany) return;
+    getDoc(doc(db, "companies", currentCompany.id, "settings", "lists"))
+      .then(snap => {
+        if (snap.exists()) {
+          const saved: string[] = snap.data().units || [];
+          const merged = Array.from(new Set([...BASE_UNITS, ...saved]));
+          setPresetUnits(merged);
+        }
+      })
+      .catch(() => {});
+  }, [currentCompany]);
 
   const toggleLineMode = (idx: number) => {
     setLineModes(prev => { const n=[...prev]; n[idx]=n[idx]==="select"?"manual":"select"; return n; });
     setLines(prev => { const u=[...prev]; u[idx]={...u[idx],productId:"",name:"",nameAr:""}; return u; });
   };
 
-  const setLineUnit = (idx: number, val: string) => {
+  const setLineUnit = (idx: number, val: string, customMode?: boolean) => {
     setLineUnits(prev => { const u=[...prev]; u[idx]=val; return u; });
     setLines(prev => { const u=[...prev]; u[idx]={...u[idx],unit:val}; return u; });
+    if (customMode !== undefined) {
+      setLineCustomModes(prev => { const u=[...prev]; u[idx]=customMode; return u; });
+    }
   };
 
   React.useEffect(() => {
@@ -150,12 +170,14 @@ export const PurchaseOrdersPage: React.FC = () => {
     setLines(prev => [...prev, { productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
     setLineModes(prev => [...prev, "select"]);
     setLineUnits(prev => [...prev, "PCE"]);
+    setLineCustomModes(prev => [...prev, false]);
   };
 
   const handleDeleteLine = (idx: number) => {
     setLines(prev => prev.filter((_, i) => i !== idx));
     setLineModes(prev => prev.filter((_, i) => i !== idx));
     setLineUnits(prev => prev.filter((_, i) => i !== idx));
+    setLineCustomModes(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleSave = async () => {
@@ -200,6 +222,7 @@ export const PurchaseOrdersPage: React.FC = () => {
     setLines([{ productId: "", name: "", nameAr: "", qty: 1, unit: "PCE", unitPrice: 0, discountPercent: 0, discountAmount: 0, vatRate: 15, vatAmount: 0, lineTotal: 0 }]);
     setLineModes(["select"]);
     setLineUnits(["PCE"]);
+    setLineCustomModes([false]);
   };
 
   const statusLabel = (s: POStatus) => {
@@ -311,7 +334,7 @@ export const PurchaseOrdersPage: React.FC = () => {
             {lines.map((line, idx) => {
               const mode = lineModes[idx] || "select";
               const currentUnit = lineUnits[idx] || line.unit || "PCE";
-              const isCustomUnit = !PRESET_UNITS.includes(currentUnit);
+              const isCustomUnit = lineCustomModes[idx] || false;
               return (
                 <div key={idx} className="p-3 border-b border-slate-100 last:border-0 space-y-2">
                   {/* Row 1: mode toggle + product/name */}
@@ -368,16 +391,16 @@ export const PurchaseOrdersPage: React.FC = () => {
                             onChange={e => setLineUnit(idx, e.target.value)}
                             placeholder="e.g. m/roll"
                             className="flex-1 min-w-0 text-xs border border-emerald-300 rounded px-2 py-1.5 focus:outline-none" />
-                          <button type="button" onClick={() => setLineUnit(idx, "PCE")}
+                          <button type="button" onClick={() => setLineUnit(idx, "PCE", false)}
                             className="text-[10px] text-slate-400 hover:text-slate-600 px-1" title="Reset">↩</button>
                         </div>
                       ) : (
                         <select value={currentUnit}
                           onChange={e => {
                             if (e.target.value === "__custom__") {
-                              setLineUnit(idx, "");
+                              setLineUnit(idx, "", true);
                             } else {
-                              setLineUnit(idx, e.target.value);
+                              setLineUnit(idx, e.target.value, false);
                             }
                           }}
                           className="w-full text-xs border border-slate-200 rounded px-1.5 py-1.5 focus:outline-none">
