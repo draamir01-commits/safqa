@@ -677,7 +677,7 @@ export const QuotationsPage: React.FC = () => {
       </div>` : "";
 
     const sigHTML = (selectedSig || (o.stamp && co?.stamp)) ? `
-      <div style="margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+      <div style="margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;${lhMode==='full'?'margin-bottom:16mm':''}">
         <!-- Signatory block -->
         <div style="flex:1;min-width:0">
           <div style="font-size:9pt;font-weight:700;color:#1a1a1a;margin-bottom:12px">Authorized Signatory:</div>
