@@ -112,7 +112,8 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
       let headerHTML = "";
       if (lhMode === "full" && lhUrl) {
         headerHTML = `<div style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1"><img src="${lhUrl}" style="width:100%;height:100%;object-fit:fill"/></div>`;
-        padTop = "48mm";
+        padTop = "52mm";
+        padBot = "28mm";
       } else if (lhMode === "header") {
         const hUrl = headerUrl || lhUrl;
         if (hUrl) {
