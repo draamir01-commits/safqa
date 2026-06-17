@@ -136,6 +136,7 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
         footerHTML = `<div style="position:fixed;bottom:0;left:0;width:100%;z-index:5;background:#fff">${pgLine}<div style="line-height:0"><img src="${footerUrl}" style="width:100%;max-height:25mm;object-fit:cover;display:block"/></div></div>`;
         padBot = "32mm";
       }
+      if (lhMode === "full") { footerHTML = ""; padBot = "32mm"; }
 
       // ── Table rows ───────────────────────────────────────────────────────
       const cols = headers ? Object.entries(headers) : [];
@@ -152,7 +153,7 @@ export const PrintManager: React.FC<PrintManagerProps> = ({
 
       // ── Signatory + stamp ────────────────────────────────────────────────
       const sigHTML = (sigObj || (includeStamp && co?.stamp)) ? `
-        <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+        <div style="margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;${lhMode==='full'?'margin-bottom:16mm':''}">
           <div style="flex:1">${sigObj ? `
             <div style="font-size:9pt;font-weight:700;margin-bottom:12px">Authorized Signatory</div>
             ${includeSignature && (sigObj as any).signatureUrl ? `<img src="${(sigObj as any).signatureUrl}" style="height:36px;max-width:100px;object-fit:contain;display:block;margin-bottom:6px"/>` : `<div style="height:36px"></div>`}
